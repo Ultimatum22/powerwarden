@@ -1,0 +1,18 @@
+{{define "content"}}
+<header><h1>Timeline</h1></header>
+<div class="card">
+  <h2>{{.Data.Day}}</h2>
+  <p class="muted">Coming up</p>
+  {{if .Data.Entries}}
+  <table>
+    <tbody>
+    {{range .Data.Entries}}
+      <tr><td class="mono">{{.Time}}</td><td>{{.Text}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p class="muted">No more schedule changes today.</p>
+  {{end}}
+</div>
+{{end}}

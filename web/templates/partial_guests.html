@@ -1,0 +1,13 @@
+{{define "partial_guests"}}
+{{range .}}
+<div class="card guest-card">
+  <div>
+    <span class="guest-name">{{.Name}}</span>
+    <span class="badge">{{.Kind}}</span>
+    {{if eq .Status "running"}}<span class="pill pill-running">Running</span>
+    {{else if eq .Status "stopped"}}<span class="pill pill-stopped">Stopped</span>
+    {{else}}<span class="pill pill-warn">{{.Status}}</span>{{end}}
+  </div>
+</div>
+{{end}}
+{{end}}

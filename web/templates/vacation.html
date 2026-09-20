@@ -1,0 +1,22 @@
+{{define "content"}}
+<header><h1>Vacation</h1></header>
+
+{{if .Vacation}}
+<div class="card card-tinted-warn">
+  <p>Vacation mode is active. The host stays off until the return date, or until you end it early. Weather safety is still enforced.</p>
+  <form hx-post="/vacation/end" hx-target="body">
+    <button type="submit" class="btn btn-danger-outline">End vacation now</button>
+  </form>
+</div>
+{{else}}
+<div class="card">
+  <p class="muted">Vacation mode shuts the host (and everything on it) down until the date you choose below. Weather safety stays enforced the whole time.</p>
+  <form hx-post="/vacation" hx-target="body">
+    <label for="return">Return date &amp; time</label>
+    <input type="datetime-local" id="return" name="return" required>
+    <p class="muted" style="margin-top:12px;">Requires a fresh passkey confirmation (step-up).</p>
+    <button type="submit" class="btn btn-primary" style="margin-top:8px;">Start vacation mode</button>
+  </form>
+</div>
+{{end}}
+{{end}}

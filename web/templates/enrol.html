@@ -1,0 +1,21 @@
+{{define "enrol"}}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Set up labpower</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="login-shell">
+    <div class="wordmark">labpower</div>
+    <h1>First-run setup</h1>
+    <p class="muted" style="max-width:320px; text-align:center;">Register the passkey you'll use to sign in from now on. This can only be done once.</p>
+    <div id="enrol-error" class="error-text" role="alert"></div>
+    <button id="enrol-btn" class="btn btn-primary" type="button" data-token="{{.Data}}">Register passkey</button>
+  </div>
+  <script src="/static/enrol.js"></script>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,21 @@
+{{define "content"}}
+<header><h1>Events</h1></header>
+<div class="card" style="padding:0;">
+  <table>
+    <thead><tr><th>Time</th><th>Kind</th><th>Target</th><th>Actor</th><th>Dry-run</th></tr></thead>
+    <tbody>
+    {{range .Data}}
+      <tr>
+        <td class="mono">{{.At.Format "2006-01-02 15:04:05"}}</td>
+        <td>{{.Kind}}</td>
+        <td>{{.Target}}</td>
+        <td>{{.Actor}}</td>
+        <td>{{if .DryRun}}yes{{else}}—{{end}}</td>
+      </tr>
+    {{else}}
+      <tr><td colspan="5" class="muted">No events yet.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}

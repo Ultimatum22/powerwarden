@@ -1,0 +1,48 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · labpower</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js"></script>
+  <meta name="htmx-config" content='{"allowEval": false, "selfRequestsOnly": true}'>
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>
+  {{if .Vacation}}
+  <div class="banner banner-warn">
+    <span>Vacation mode is active.</span>
+    <form method="post" action="/vacation/end" hx-post="/vacation/end" hx-target="body">
+      <button type="submit" class="btn btn-sm">End vacation now</button>
+    </form>
+  </div>
+  {{end}}
+
+  <div class="app-shell">
+    <nav class="sidebar" aria-label="Primary">
+      <div class="wordmark">labpower</div>
+      <a href="/" class="nav-item" {{if eq .ActiveNav "dashboard"}}aria-current="page"{{end}}>{{template "icon-power" .}} Dashboard</a>
+      <a href="/timeline" class="nav-item" {{if eq .ActiveNav "timeline"}}aria-current="page"{{end}}>{{template "icon-chevron" .}} Timeline</a>
+      <a href="/vacation" class="nav-item" {{if eq .ActiveNav "vacation"}}aria-current="page"{{end}}>{{template "icon-key" .}} Vacation</a>
+      <a href="/events" class="nav-item" {{if eq .ActiveNav "events"}}aria-current="page"{{end}}>{{template "icon-alert" .}} Events</a>
+      <a href="/security" class="nav-item" {{if eq .ActiveNav "security"}}aria-current="page"{{end}}>{{template "icon-lock" .}} Security</a>
+      <div class="session-box">
+        Signed in with passkey · via Pangolin{{if .SessionEnd}} · session ends in {{.SessionEnd}}{{end}}
+      </div>
+    </nav>
+
+    <main class="content">
+      {{template "content" .}}
+    </main>
+
+    <nav class="bottom-tabs" aria-label="Primary">
+      <a href="/" {{if eq .ActiveNav "dashboard"}}aria-current="page"{{end}}>{{template "icon-power" .}}<span>Dashboard</span></a>
+      <a href="/timeline" {{if eq .ActiveNav "timeline"}}aria-current="page"{{end}}>{{template "icon-chevron" .}}<span>Timeline</span></a>
+      <a href="/vacation" {{if eq .ActiveNav "vacation"}}aria-current="page"{{end}}>{{template "icon-key" .}}<span>Vacation</span></a>
+      <a href="/events" {{if eq .ActiveNav "events"}}aria-current="page"{{end}}>{{template "icon-alert" .}}<span>Events</span></a>
+    </nav>
+  </div>
+</body>
+</html>
+{{end}}

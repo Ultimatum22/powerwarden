@@ -1,0 +1,86 @@
+{{define "content"}}
+<header>
+  <h1>Dashboard</h1>
+</header>
+
+<section class="card" aria-label="Proxmox host">
+  <div class="stat-label">PROXMOX HOST</div>
+  {{if .Data.Host.Reachable}}
+    <span class="pill pill-running">Running</span>
+  {{else}}
+    <span class="pill pill-stopped">Stopped</span>
+  {{end}}
+  <p class="muted">Schedule <span class="mono">{{.Data.Host.ScheduleName}}</span></p>
+  {{if .Data.Host.Override}}
+  <div class="override-strip">
+    <span>Manual override · action <strong>{{.Data.Host.Override.Action}}</strong>{{if .Data.Host.Override.Until}} until {{.Data.Host.Override.Until.Format "15:04"}}{{end}}</span>
+    <form hx-post="/overrides/{{.Data.Host.Override.ID}}/cancel" hx-target="body">
+      <button type="submit" class="btn btn-sm">Cancel</button>
+    </form>
+  </div>
+  {{end}}
+  <div style="margin-top:12px; display:flex; gap:8px;">
+    <form hx-post="/host/wake" hx-target="body"><button type="submit" class="btn">Keep on tonight</button></form>
+    <a href="/host/shutdown" class="btn btn-danger-outline">Shut down…</a>
+  </div>
+</section>
+
+<section class="card {{if eq .Data.Weather.Level "warning"}}card-tinted-warn{{else if eq .Data.Weather.Level "danger"}}card-tinted-danger{{end}}" aria-label="Weather">
+  {{template "icon-bolt" .}}
+  <div class="stat-label">WEATHER</div>
+  <span class="pill {{if eq .Data.Weather.Level "danger"}}pill-danger{{else if eq .Data.Weather.Level "warning"}}pill-warn{{else if eq .Data.Weather.Level "watch"}}pill-warn{{else}}pill-running{{end}}">{{.Data.Weather.Level}}</span>
+  {{if eq .Data.Weather.Level "warning"}}
+  <form hx-post="/weather/ignore" hx-target="body" style="margin-top:8px;">
+    <input type="hidden" name="minutes" value="60">
+    <button type="submit" class="btn btn-sm">Cancel shutdown (step-up)</button>
+  </form>
+  {{end}}
+</section>
+
+<section>
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h2>Guests</h2>
+    <a href="/timeline">View timeline</a>
+  </div>
+  {{range .Data.Guests}}
+  <div class="card guest-card">
+    <div>
+      <span class="guest-name">{{.Name}}</span>
+      <span class="badge">{{.Kind}}</span>
+      {{if .AlwaysOn}}
+        {{template "icon-lock" $}}
+        <div class="guest-meta">Always on</div>
+      {{else}}
+        <div class="guest-meta">Schedule <span class="mono">{{.ScheduleName}}</span></div>
+      {{end}}
+      {{if eq .Status "running"}}
+        <span class="pill pill-running">Running</span>
+      {{else if eq .Status "stopped"}}
+        <span class="pill pill-stopped">Stopped</span>
+      {{else}}
+        <span class="pill pill-warn">{{.Status}}</span>
+      {{end}}
+      {{if .Override}}
+      <div class="override-strip">
+        <span>Manual {{.Override.Action}}{{if .Override.Until}} · until {{.Override.Until.Format "15:04"}}, then schedule{{end}}</span>
+        <form hx-post="/overrides/{{.Override.ID}}/cancel" hx-target="body">
+          <button type="submit" class="btn btn-sm">Cancel</button>
+        </form>
+      </div>
+      {{end}}
+    </div>
+    {{if not .AlwaysOn}}
+    <div style="display:flex; gap:8px;">
+      <form hx-post="/guests/{{.Name}}/start" hx-target="body">
+        <input type="hidden" name="duration" value="2h">
+        <button type="submit" class="btn btn-sm">Start for 2h</button>
+      </form>
+      <form hx-post="/guests/{{.Name}}/stop" hx-target="body">
+        <button type="submit" class="btn btn-sm">Stop</button>
+      </form>
+    </div>
+    {{end}}
+  </div>
+  {{end}}
+</section>
+{{end}}

@@ -1,0 +1,42 @@
+{{define "content"}}
+<a href="/">&larr; Back</a>
+<h1>Shut down the host?</h1>
+<p class="muted">The Proxmox host and everything running on it will shut down.</p>
+
+<div class="card {{if .Data.AlwaysOnNames}}card-tinted-danger{{end}}">
+  <h2>What goes down</h2>
+  {{if .Data.AlwaysOnNames}}
+  <p class="error-text">Always-on guests will also be taken down: {{range .Data.AlwaysOnNames}}<span class="mono">{{.}}</span> {{end}}</p>
+  {{end}}
+  <table>
+    <tbody>
+    {{range .Data.Guests}}
+      <tr><td class="mono">{{.Name}}</td><td>{{.Status}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Pre-checks</h2>
+  {{if .Data.TasksErr}}
+    <p class="error-text">Could not check active tasks: node unreachable.</p>
+  {{else if gt .Data.ActiveTasks 0}}
+    <p class="error-text">{{.Data.ActiveTasks}} task(s) still active on the node — shutdown will be postponed until they finish.</p>
+  {{else}}
+    <p>{{template "icon-check" .}} No active tasks.</p>
+  {{end}}
+</div>
+
+<form hx-post="/host/shutdown" hx-target="body">
+  <div class="card">
+    <h2>Wake up again</h2>
+    <label><input type="radio" name="wake" value="schedule" checked> At next schedule</label>
+    <label><input type="radio" name="wake" value="date"> On a date</label>
+    <input type="datetime-local" name="date">
+    <label><input type="radio" name="wake" value="manual"> Only manually</label>
+  </div>
+  <button type="submit" class="btn btn-danger">Confirm with passkey</button>
+  <a href="/" class="btn">Cancel</a>
+</form>
+{{end}}

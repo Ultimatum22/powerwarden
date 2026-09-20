@@ -1,0 +1,45 @@
+{{define "content"}}
+<header><h1>Security</h1></header>
+
+<section class="card">
+  <h2>Passkeys</h2>
+  {{range .Data.Credentials}}
+  <div class="guest-card">
+    <div>
+      <span class="mono">{{.IDHex}}</span>
+      <div class="guest-meta">Added {{.CreatedAt.Format "2006-01-02"}}{{if .LastUsed}} · last used {{.LastUsed.Format "2006-01-02 15:04"}}{{else}} · never used{{end}}</div>
+    </div>
+  </div>
+  {{else}}
+  <p class="muted">No passkeys registered.</p>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>Authenticator app (TOTP)</h2>
+  {{if .Data.HasTOTP}}
+  <p><span class="pill pill-running">Configured</span></p>
+  {{else}}
+  <p><span class="pill pill-stopped">Not configured</span></p>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>Active sessions</h2>
+  <table>
+    <thead><tr><th>Started</th><th>Last seen</th><th>IP</th><th></th></tr></thead>
+    <tbody>
+    {{range .Data.Sessions}}
+      <tr>
+        <td class="mono">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+        <td class="mono">{{.LastSeen.Format "2006-01-02 15:04"}}</td>
+        <td class="mono">{{.IP}}</td>
+        <td>
+          {{if .Current}}<span class="badge">this session</span>{{end}}
+        </td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}

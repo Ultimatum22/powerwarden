@@ -1,0 +1,4 @@
+{{define "partial_host"}}
+{{if .Reachable}}<span class="pill pill-running">Running</span>{{else}}<span class="pill pill-stopped">Stopped</span>{{end}}
+<p class="muted">Schedule <span class="mono">{{.ScheduleName}}</span></p>
+{{end}}
