@@ -273,6 +273,11 @@ func TestWeatherValidation(t *testing.T) {
 			extra:   "weather:\n  local_sensor: { enabled: true, bus: /dev/i2c-1 }\n",
 			wantErr: "weather.local_sensor.irq_gpio",
 		},
+		{
+			name:    "enforce mode without a warning countdown",
+			extra:   "weather:\n  mode: enforce\n",
+			wantErr: "weather.levels.warning.countdown",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -298,6 +303,23 @@ func TestWeatherValidConfigWithLightningAndSensorPasses(t *testing.T) {
   forecast: { provider: open-meteo }
   levels:
     warning: { strike_radius_km: 30 }
+    danger: { strike_radius_km: 12 }
+`
+	c, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
+func TestWeatherEnforceModeWithCountdownAndGracePasses(t *testing.T) {
+	secret := writeSecret(t)
+	yaml := validYAML(secret) + `weather:
+  mode: enforce
+  levels:
+    warning: { strike_radius_km: 30, countdown: 10m }
     danger: { strike_radius_km: 12 }
 `
 	c, err := Parse([]byte(yaml))

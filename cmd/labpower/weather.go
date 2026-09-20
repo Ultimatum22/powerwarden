@@ -21,6 +21,17 @@ import (
 // outright: a source that can't be built (e.g. no AS3935 physically
 // present) is logged and left disabled, since weather ships notify-only —
 // labpower's core scheduling must keep running either way.
+// weatherMode defaults to "notify" when unset (CLAUDE.md: "Ship with
+// weather in notify-only mode first ... default notify"); config
+// validation already rejects anything other than "", "notify", or
+// "enforce".
+func weatherMode(configured string) string {
+	if configured == "" {
+		return "notify"
+	}
+	return configured
+}
+
 func newWeatherMonitorConfig(cfg *config.Config, logger *slog.Logger) weather.Config {
 	wc := weather.Config{
 		Location:                 weather.Point{Lat: cfg.Weather.Location.Lat, Lon: cfg.Weather.Location.Lon},

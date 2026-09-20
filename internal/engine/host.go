@@ -8,6 +8,7 @@ import (
 
 	"github.com/Ultimatum22/powerwarden/internal/notify"
 	"github.com/Ultimatum22/powerwarden/internal/proxmox"
+	"github.com/Ultimatum22/powerwarden/internal/weather"
 )
 
 const hostTarget = "host" // the overrides/events "target" naming the host itself
@@ -18,6 +19,10 @@ const (
 	hostWakeFailedKey   = "host_wake_failed"
 
 	hostShutdownPostponedNotifiedKey = "host_shutdown_postponed_notified"
+
+	weatherWarningSinceKey    = "weather_warning_since"
+	weatherDangerSinceKey     = "weather_danger_since"
+	weatherDangerTaskGraceKey = "weather_danger_task_grace_since"
 )
 
 // reconcileHost decides whether the host needs to wake up or shut down
@@ -36,13 +41,26 @@ const (
 // to shut down this tick — in any of those cases Tick must not try to
 // reconcile guests (there's no node to reach, or one that's about to
 // disappear).
-func (e *Engine) reconcileHost(ctx context.Context, now time.Time, reachable, anyGuestWantsOn bool, actual map[string]proxmox.Guest) (notReady bool, err error) {
-	hostSched := e.Schedules[e.Host.Schedule]
-	baseDesired := hostSched.IsOn(now, e.Loc) || anyGuestWantsOn
-
-	desired, act, err := e.hostDesiredState(ctx, now, baseDesired)
+func (e *Engine) reconcileHost(ctx context.Context, now time.Time, reachable, anyGuestWantsOn bool, actual map[string]proxmox.Guest, weatherResult weather.Result) (notReady bool, err error) {
+	forceOff, bypassActiveTasks, err := e.weatherSafety(ctx, now, weatherResult)
 	if err != nil {
 		return false, err
+	}
+
+	var desired, act bool
+	if forceOff {
+		// Safety beats manual override and schedule both (CLAUDE.md:
+		// "Safety (weather...) > manual override > schedule"), so this
+		// skips hostDesiredState (and therefore any "pause"/"on"
+		// override) entirely.
+		desired, act = false, true
+	} else {
+		hostSched := e.Schedules[e.Host.Schedule]
+		baseDesired := hostSched.IsOn(now, e.Loc) || anyGuestWantsOn
+		desired, act, err = e.hostDesiredState(ctx, now, baseDesired)
+		if err != nil {
+			return false, err
+		}
 	}
 	if !act {
 		return !reachable, nil // paused: leave the host exactly as it is
@@ -55,7 +73,7 @@ func (e *Engine) reconcileHost(ctx context.Context, now time.Time, reachable, an
 		if !reachable {
 			return true, nil // already off
 		}
-		return e.shutdownHost(ctx, actual)
+		return e.shutdownHost(ctx, now, actual, bypassActiveTasks)
 	}
 
 	if reachable {
@@ -65,6 +83,72 @@ func (e *Engine) reconcileHost(ctx context.Context, now time.Time, reachable, an
 		return false, nil
 	}
 	return true, e.pursueWake(ctx, now)
+}
+
+// weatherSafety implements CLAUDE.md's weather safeguard level table for
+// the host: Warning shuts down after warning.countdown unless an
+// ignore_weather override is active; Danger shuts down immediately,
+// bypassing the usual indefinite wait for active tasks after
+// host.shutdown_grace (not bypassing the check itself — shutdownHost
+// still checks, it just won't wait past the grace period). Only takes
+// effect when weather.mode is "enforce"; ships notify-only otherwise.
+func (e *Engine) weatherSafety(ctx context.Context, now time.Time, result weather.Result) (forceOff, bypassActiveTasksAfterGrace bool, err error) {
+	if e.WeatherMode != "enforce" || result.Level < weather.Warning {
+		if err := e.clearWeatherEnforcementState(ctx); err != nil {
+			return false, false, err
+		}
+		return false, false, nil
+	}
+
+	ov, err := e.Store.EffectiveOverride(ctx, hostTarget, now)
+	if err != nil {
+		return false, false, fmt.Errorf("engine: effective host override: %w", err)
+	}
+	if ov != nil && ov.Action == "ignore_weather" {
+		return false, false, nil
+	}
+
+	if result.Level >= weather.Danger {
+		return true, true, nil
+	}
+
+	// Warning: wait out the countdown, still respecting active tasks
+	// normally (only Danger bypasses that).
+	since, err := e.stateSince(ctx, weatherWarningSinceKey, now)
+	if err != nil {
+		return false, false, err
+	}
+	return now.Sub(since) >= e.WeatherWarningCountdown, false, nil
+}
+
+func (e *Engine) clearWeatherEnforcementState(ctx context.Context) error {
+	for _, key := range []string{weatherWarningSinceKey, weatherDangerSinceKey, weatherDangerTaskGraceKey} {
+		if err := e.Store.DeleteState(ctx, key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// stateSince returns the timestamp stored at key, initializing it to now
+// (and persisting that) the first time it's asked for — used to measure
+// "how long has X been true" across ticks without a dedicated table.
+func (e *Engine) stateSince(ctx context.Context, key string, now time.Time) (time.Time, error) {
+	s, ok, err := e.Store.GetState(ctx, key)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("engine: load %s: %w", key, err)
+	}
+	if ok {
+		t, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("engine: parse %s %q: %w", key, s, err)
+		}
+		return t, nil
+	}
+	if err := e.Store.SetState(ctx, key, now.Format(time.RFC3339)); err != nil {
+		return time.Time{}, err
+	}
+	return now, nil
 }
 
 // hostDesiredState applies "manual override beats schedule" to the host,
@@ -179,26 +263,44 @@ func (e *Engine) clearWakeState(ctx context.Context) error {
 // overriding the usual "manual start persists until the next boundary"
 // rule: that rule exists to avoid needlessly interrupting guests, not to
 // keep one running while the host underneath it disappears.
-func (e *Engine) shutdownHost(ctx context.Context, actual map[string]proxmox.Guest) (notReady bool, err error) {
+func (e *Engine) shutdownHost(ctx context.Context, now time.Time, actual map[string]proxmox.Guest, bypassActiveTasksAfterGrace bool) (notReady bool, err error) {
 	tasks, err := e.Proxmox.ActiveTasks(ctx)
 	if err != nil {
 		return true, fmt.Errorf("engine: check active tasks: %w", err)
 	}
 	if len(tasks) > 0 {
-		notified, _, err := e.Store.GetState(ctx, hostShutdownPostponedNotifiedKey)
-		if err != nil {
-			return true, err
-		}
-		if notified != "true" {
-			e.Logger.Warn("engine: host shutdown postponed, active tasks running", "tasks", len(tasks))
-			e.notifyBestEffort(ctx, notify.Notification{Title: "labpower", Body: "Host shutdown postponed: a task is still running"})
-			if err := e.Store.SetState(ctx, hostShutdownPostponedNotifiedKey, "true"); err != nil {
+		proceedAnyway := false
+		if bypassActiveTasksAfterGrace {
+			since, err := e.stateSince(ctx, weatherDangerTaskGraceKey, now)
+			if err != nil {
 				return true, err
 			}
+			proceedAnyway = now.Sub(since) >= e.Host.ShutdownGrace
 		}
-		return true, nil
+		if !proceedAnyway {
+			notified, _, err := e.Store.GetState(ctx, hostShutdownPostponedNotifiedKey)
+			if err != nil {
+				return true, err
+			}
+			if notified != "true" {
+				e.Logger.Warn("engine: host shutdown postponed, active tasks running", "tasks", len(tasks), "weather_grace", bypassActiveTasksAfterGrace)
+				e.notifyBestEffort(ctx, notify.Notification{Title: "labpower", Body: "Host shutdown postponed: a task is still running"})
+				if err := e.Store.SetState(ctx, hostShutdownPostponedNotifiedKey, "true"); err != nil {
+					return true, err
+				}
+			}
+			return true, nil
+		}
+		e.Logger.Error("engine: forcing host shutdown despite active tasks — weather Danger grace period elapsed", "tasks", len(tasks))
+		e.notifyBestEffort(ctx, notify.Notification{
+			Title: "labpower", Priority: notify.PriorityUrgent,
+			Body: "Forcing host shutdown despite active tasks: weather Danger grace period elapsed",
+		})
 	}
 	if err := e.Store.DeleteState(ctx, hostShutdownPostponedNotifiedKey); err != nil {
+		return true, err
+	}
+	if err := e.Store.DeleteState(ctx, weatherDangerTaskGraceKey); err != nil {
 		return true, err
 	}
 

@@ -107,8 +107,10 @@ func runServe(ctx context.Context, args []string, logger *slog.Logger) error {
 		WoLRetries:     cfg.WoL.Retries,
 		WoLWakeTimeout: cfg.WoL.WakeTimeout,
 
-		Notifier: notifier,
-		Weather:  weatherMonitor,
+		Notifier:                notifier,
+		Weather:                 weatherMonitor,
+		WeatherMode:             weatherMode(cfg.Weather.Mode),
+		WeatherWarningCountdown: cfg.Weather.Levels.Warning.Countdown,
 	})
 	if err != nil {
 		return err

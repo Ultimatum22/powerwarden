@@ -72,6 +72,16 @@ type Config struct {
 
 	// Weather is optional; nil disables weather monitoring entirely.
 	Weather *weather.Monitor
+	// WeatherMode is "notify" (default) or "enforce" (CLAUDE.md: "Ship
+	// with weather in notify-only mode first"). Only "enforce" makes the
+	// host state machine act on the level; any other value (including
+	// empty) is treated as notify-only.
+	WeatherMode string
+	// WeatherWarningCountdown is how long a Warning level is tolerated
+	// before shutting down, unless cancelled via an "ignore_weather"
+	// override (CLAUDE.md: "host shuts down after countdown unless
+	// cancelled").
+	WeatherWarningCountdown time.Duration
 
 	// TaskPollInterval and TaskTimeout control how long Tick waits for a
 	// Proxmox task (start/shutdown) to finish before giving up. Zero means
@@ -118,7 +128,7 @@ func (e *Engine) Tick(ctx context.Context) error {
 	}
 	now := e.Clock.Now()
 
-	e.reconcileWeather(ctx, now) // best-effort: notify-only, never blocks host/guest logic
+	weatherResult := e.reconcileWeather(ctx, now) // evaluation/notification failures are logged, not returned (see reconcileWeather)
 
 	lastTickStr, hasLastTick, err := e.Store.GetState(ctx, lastTickKey)
 	if err != nil {
@@ -153,7 +163,7 @@ func (e *Engine) Tick(ctx context.Context) error {
 		return err
 	}
 
-	shuttingDown, err := e.reconcileHost(ctx, now, reachable, anyGuestWantsOn, actual)
+	shuttingDown, err := e.reconcileHost(ctx, now, reachable, anyGuestWantsOn, actual, weatherResult)
 	if err != nil {
 		return err
 	}

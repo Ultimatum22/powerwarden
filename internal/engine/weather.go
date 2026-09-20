@@ -16,22 +16,23 @@ const (
 )
 
 // reconcileWeather evaluates the current threat level and reports level
-// changes as events and notifications. It ships notify-only: nothing here
-// changes what the host or guest reconciliation above does with the
-// level — that's the weather-enforce milestone's job. Failures here are
-// logged, not returned, so a weather subsystem hiccup (e.g. a transient
-// store error) never blocks the safety-critical host/guest logic that
-// follows it in Tick.
-func (e *Engine) reconcileWeather(ctx context.Context, now time.Time) {
+// changes as events and notifications, returning the result so Tick can
+// feed it into host reconciliation (see host.go's weather-enforce logic).
+// Evaluation and notification failures here are logged, not returned, so
+// a weather subsystem hiccup (e.g. a transient store error) never blocks
+// the safety-critical host/guest logic that follows it in Tick — but the
+// Level itself is always returned, since silently treating "couldn't
+// evaluate" as Normal would be exactly backwards for a safety feature.
+func (e *Engine) reconcileWeather(ctx context.Context, now time.Time) weather.Result {
 	if e.Weather == nil {
-		return
+		return weather.Result{Level: weather.Normal}
 	}
 	result := e.Weather.Evaluate(ctx, now)
 
 	lastLevel, err := e.storedWeatherLevel(ctx)
 	if err != nil {
 		e.Logger.Error("engine: load weather level", "error", err)
-		return
+		return result
 	}
 
 	if result.Level != lastLevel {
@@ -60,6 +61,7 @@ func (e *Engine) reconcileWeather(ctx context.Context, now time.Time) {
 	}
 
 	e.reconcileStaleNotification(ctx, result)
+	return result
 }
 
 // reconcileStaleNotification implements CLAUDE.md's "if stale during

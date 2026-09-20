@@ -319,6 +319,15 @@ func (c *Config) validateWeather() []error {
 			errs = append(errs, fmt.Errorf("weather.local_sensor.irq_gpio is required when local_sensor is enabled"))
 		}
 	}
+
+	if c.Weather.Mode == "enforce" {
+		if c.Weather.Levels.Warning.Countdown <= 0 {
+			errs = append(errs, fmt.Errorf("weather.levels.warning.countdown must be positive when weather.mode is \"enforce\" (an unset countdown would shut down instantly on Warning)"))
+		}
+		if c.Host.ShutdownGrace <= 0 {
+			errs = append(errs, fmt.Errorf("host.shutdown_grace must be positive when weather.mode is \"enforce\" (it governs how long a Danger shutdown waits for active tasks)"))
+		}
+	}
 	return errs
 }
 
