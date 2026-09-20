@@ -31,3 +31,12 @@ func (s *Store) SetState(ctx context.Context, key, value string) error {
 	}
 	return nil
 }
+
+// DeleteState removes key entirely, so a later GetState reports it unset
+// rather than present with an empty value.
+func (s *Store) DeleteState(ctx context.Context, key string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM state WHERE key = ?`, key); err != nil {
+		return fmt.Errorf("store: delete state %q: %w", key, err)
+	}
+	return nil
+}

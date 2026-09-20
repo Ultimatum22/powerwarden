@@ -47,6 +47,10 @@ guests:
   lxc-forge: { always_on: true }
   lxc-edge: { always_on: true }
   vm-media: { schedule: evenings, depends_on: [] }
+
+notify:
+  provider: ntfy
+  url: https://ntfy.sh/labpower-test
 `
 }
 
@@ -118,10 +122,11 @@ func TestUnknownGuestDependencyRejected(t *testing.T) {
 
 func TestDependencyCycleRejected(t *testing.T) {
 	secret := writeSecret(t)
-	yaml := validYAML(secret) + `
-  vm-a: { schedule: evenings, depends_on: [vm-b] }
-  vm-b: { schedule: evenings, depends_on: [vm-a] }
-`
+	yaml := strings.Replace(validYAML(secret),
+		"vm-media: { schedule: evenings, depends_on: [] }\n",
+		"vm-media: { schedule: evenings, depends_on: [] }\n"+
+			"  vm-a: { schedule: evenings, depends_on: [vm-b] }\n"+
+			"  vm-b: { schedule: evenings, depends_on: [vm-a] }\n", 1)
 	c, err := Parse([]byte(yaml))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)

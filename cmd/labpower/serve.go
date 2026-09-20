@@ -4,15 +4,19 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Ultimatum22/powerwarden/internal/clock"
 	"github.com/Ultimatum22/powerwarden/internal/config"
 	"github.com/Ultimatum22/powerwarden/internal/engine"
+	"github.com/Ultimatum22/powerwarden/internal/notify"
 	"github.com/Ultimatum22/powerwarden/internal/schedule"
 	"github.com/Ultimatum22/powerwarden/internal/store"
+	"github.com/Ultimatum22/powerwarden/internal/wol"
 )
 
 // tickInterval matches CLAUDE.md's "the engine ticks every 30 seconds".
@@ -54,7 +58,41 @@ func runServe(ctx context.Context, args []string, logger *slog.Logger) error {
 		return err
 	}
 
-	eng, err := engine.New(guests, schedules, clock.Real{}, proxmoxClient, st, logger, cfg.IsDryRun(), loc)
+	mac, err := net.ParseMAC(cfg.WoL.MAC)
+	if err != nil {
+		return fmt.Errorf("wol.mac: %w", err)
+	}
+	wolSender, err := wol.New(cfg.WoL)
+	if err != nil {
+		return err
+	}
+	notifier, err := newNotifier(cfg)
+	if err != nil {
+		return err
+	}
+
+	eng, err := engine.New(engine.Config{
+		Clock:   clock.Real{},
+		Proxmox: proxmoxClient,
+		Store:   st,
+		Logger:  logger,
+		DryRun:  cfg.IsDryRun(),
+		Loc:     loc,
+
+		Guests:    guests,
+		Schedules: schedules,
+		Host: engine.HostConfig{
+			Schedule:      cfg.Host.Schedule,
+			ShutdownGrace: cfg.Host.ShutdownGrace,
+		},
+
+		WoLSender:      wolSender,
+		WoLMAC:         mac,
+		WoLRetries:     cfg.WoL.Retries,
+		WoLWakeTimeout: cfg.WoL.WakeTimeout,
+
+		Notifier: notifier,
+	})
 	if err != nil {
 		return err
 	}
@@ -88,6 +126,20 @@ func runServe(ctx context.Context, args []string, logger *slog.Logger) error {
 			tick()
 		}
 	}
+}
+
+// newNotifier builds the configured Notifier, reading its token from disk
+// (never from the config file itself).
+func newNotifier(cfg *config.Config) (notify.Notifier, error) {
+	var token string
+	if cfg.Notify.TokenFile != "" {
+		b, err := os.ReadFile(cfg.Notify.TokenFile)
+		if err != nil {
+			return nil, fmt.Errorf("read notify token: %w", err)
+		}
+		token = strings.TrimSpace(string(b))
+	}
+	return notify.New(cfg.Notify, token)
 }
 
 // defaultStateDir follows systemd's StateDirectory= convention: when the

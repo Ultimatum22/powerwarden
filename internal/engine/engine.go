@@ -1,11 +1,12 @@
 // Package engine is the scheduler: it ticks periodically, decides what
-// should change based on schedules and overrides, and drives guests
-// through internal/proxmox. It depends only on interfaces (clock, Proxmox,
-// store) so a full week can be simulated in milliseconds — see
-// internal/engine's tests and CLAUDE.md's "Scheduling engine" section.
+// should change based on schedules and overrides, and drives guests and
+// the host through internal/proxmox and internal/wol. It depends only on
+// interfaces (clock, Proxmox, WoL, notify, store) so a full week can be
+// simulated in milliseconds — see internal/engine's tests and CLAUDE.md's
+// "Scheduling engine" section.
 //
-// This milestone covers guest scheduling only; the host state machine and
-// weather safeguard are built on top of the same Tick in later milestones.
+// The weather safeguard is built on top of the same Tick in a later
+// milestone.
 package engine
 
 import (
@@ -13,12 +14,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"time"
 
 	"github.com/Ultimatum22/powerwarden/internal/clock"
+	"github.com/Ultimatum22/powerwarden/internal/notify"
 	"github.com/Ultimatum22/powerwarden/internal/proxmox"
 	"github.com/Ultimatum22/powerwarden/internal/schedule"
 	"github.com/Ultimatum22/powerwarden/internal/store"
+	"github.com/Ultimatum22/powerwarden/internal/wol"
 )
 
 // lastTickKey is the state table key holding the last tick's timestamp.
@@ -34,9 +38,18 @@ type GuestConfig struct {
 	DependsOn []string
 }
 
-// Engine ticks the scheduler. Construct with New so dependency ordering is
-// validated and precomputed.
-type Engine struct {
+// HostConfig is the subset of the host's config the engine needs.
+type HostConfig struct {
+	Schedule string
+	// ShutdownGrace is parsed and validated but not yet used: per
+	// CLAUDE.md's state machine notes, it's the short grace period that
+	// lets a weather-Danger shutdown bypass the active-tasks check, which
+	// arrives with the weather milestone.
+	ShutdownGrace time.Duration
+}
+
+// Config configures a new Engine. See New.
+type Config struct {
 	Clock   clock.Clock
 	Proxmox proxmox.Client
 	Store   *store.Store
@@ -46,6 +59,14 @@ type Engine struct {
 
 	Guests    []GuestConfig
 	Schedules map[string]schedule.Schedule
+	Host      HostConfig
+
+	WoLSender      wol.Sender
+	WoLMAC         net.HardwareAddr
+	WoLRetries     int
+	WoLWakeTimeout time.Duration
+
+	Notifier notify.Notifier
 
 	// TaskPollInterval and TaskTimeout control how long Tick waits for a
 	// Proxmox task (start/shutdown) to finish before giving up. Zero means
@@ -53,37 +74,37 @@ type Engine struct {
 	// client's (instant) completion from mattering either way.
 	TaskPollInterval time.Duration
 	TaskTimeout      time.Duration
+}
 
+// Engine ticks the scheduler. Construct with New so dependency ordering is
+// validated and precomputed.
+type Engine struct {
+	Config
 	order []string // guest names, dependencies before dependents
 }
 
 // New builds an Engine, computing and validating the guest dependency
 // order up front so Tick never has to (and so a cycle is caught at
 // construction rather than buried in a tick).
-func New(guests []GuestConfig, schedules map[string]schedule.Schedule, c clock.Clock, px proxmox.Client, st *store.Store, logger *slog.Logger, dryRun bool, loc *time.Location) (*Engine, error) {
-	order, err := topologicalOrder(guests)
+func New(cfg Config) (*Engine, error) {
+	order, err := TopologicalOrder(cfg.Guests)
 	if err != nil {
 		return nil, err
 	}
-	if logger == nil {
-		logger = slog.New(slog.DiscardHandler)
+	if cfg.Logger == nil {
+		cfg.Logger = slog.New(slog.DiscardHandler)
 	}
-	return &Engine{
-		Clock:     c,
-		Proxmox:   px,
-		Store:     st,
-		Logger:    logger,
-		DryRun:    dryRun,
-		Loc:       loc,
-		Guests:    guests,
-		Schedules: schedules,
-		order:     order,
-	}, nil
+	if cfg.Notifier == nil {
+		cfg.Notifier = notify.NewFake()
+	}
+	return &Engine{Config: cfg, order: order}, nil
 }
 
-// Tick runs one scheduler pass: it loads the last tick, computes what
-// changed for each guest since then (a schedule boundary crossed, or the
-// active override changed), and acts only on what changed — see
+// Tick runs one scheduler pass. It first reconciles the host (waking or
+// shutting it down as needed — see host.go), then, only if the host is
+// reachable and isn't shutting down this tick, reconciles guests the same
+// way milestone 2 did: act only on what changed since the last tick (a
+// schedule boundary crossed, or the active override changed) — see
 // CLAUDE.md's "Edge-triggered with catch-up".
 func (e *Engine) Tick(ctx context.Context) error {
 	if !e.Clock.Trusted() {
@@ -105,16 +126,45 @@ func (e *Engine) Tick(ctx context.Context) error {
 		}
 	}
 
-	guests, err := e.Proxmox.ListGuests(ctx)
-	if err != nil {
-		return fmt.Errorf("engine: list guests: %w", err)
-	}
-	byName := make(map[string]proxmox.Guest, len(guests))
-	for _, g := range guests {
-		byName[g.Name] = g
+	_, reachErr := e.Proxmox.NodeStatus(ctx)
+	reachable := reachErr == nil
+
+	var actual map[string]proxmox.Guest
+	if reachable {
+		guests, err := e.Proxmox.ListGuests(ctx)
+		if err != nil {
+			return fmt.Errorf("engine: list guests: %w", err)
+		}
+		actual = make(map[string]proxmox.Guest, len(guests))
+		for _, g := range guests {
+			actual[g.Name] = g
+		}
 	}
 
-	starts, stops, err := e.plan(ctx, bootstrap, lastTick, now, byName)
+	anyGuestWantsOn, err := e.anyGuestWantsOn(ctx, now)
+	if err != nil {
+		return err
+	}
+
+	shuttingDown, err := e.reconcileHost(ctx, now, reachable, anyGuestWantsOn, actual)
+	if err != nil {
+		return err
+	}
+
+	if !reachable || shuttingDown {
+		// Guests can't be reconciled without the host, and while it's off
+		// their schedule boundaries simply haven't been evaluated yet — so
+		// last_tick must NOT advance here. If it did, a multi-day host-off
+		// stretch would erase the catch-up window: once the host wakes
+		// back up, plan() would see almost no elapsed time since
+		// "last_tick" and miss boundaries that were crossed while the
+		// host was down. Leaving it frozen means the very next tick where
+		// guests actually get reconciled naturally sees the full gap and
+		// catches up, the same as after any other downtime.
+		return nil
+	}
+
+	starts, stops, err := e.plan(ctx, bootstrap, lastTick, now, actual)
 	if err != nil {
 		return err
 	}
@@ -137,13 +187,13 @@ func (e *Engine) Tick(ctx context.Context) error {
 			}
 		}
 	}
-
-	// Only checkpoint progress if every action this tick succeeded, so a
-	// failure retries from the same boundary next tick instead of being
-	// silently skipped (see plannedAction/execute).
 	if len(actionErrs) > 0 {
-		return fmt.Errorf("engine: %d action(s) failed: %w", len(actionErrs), errors.Join(actionErrs...))
+		return fmt.Errorf("engine: %d guest action(s) failed: %w", len(actionErrs), errors.Join(actionErrs...))
 	}
+
+	// Only checkpoint progress if everything this tick succeeded, so a
+	// failure retries from the same boundary next tick instead of being
+	// silently skipped.
 	if err := e.Store.SetState(ctx, lastTickKey, now.Format(time.RFC3339)); err != nil {
 		return fmt.Errorf("engine: save last_tick: %w", err)
 	}

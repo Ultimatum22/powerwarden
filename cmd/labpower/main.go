@@ -47,8 +47,8 @@ Commands:
   wake                  Send a Wake-on-LAN packet to the host
   guest start <name>    Start a guest now
   guest stop <name>     Stop a guest now
-  serve                 Run the guest scheduler (web UI not yet implemented)
-  host shutdown         Shut down the Proxmox host (not yet implemented)
+  serve                 Run the scheduler (web UI not yet implemented)
+  host shutdown         Shut down the Proxmox host
   enrol                 Print a first-run enrolment token (not yet implemented)
 
 Global flags (place after the command):
@@ -73,7 +73,9 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 		return runGuest(ctx, rest, logger)
 	case "serve":
 		return runServe(ctx, rest, logger)
-	case "host", "enrol":
+	case "host":
+		return runHost(ctx, rest, logger)
+	case "enrol":
 		fmt.Fprintf(os.Stderr, "labpower %s: not implemented yet (planned for a later milestone; see CLAUDE.md)\n", cmd)
 		return errUsage
 	case "-h", "-help", "--help", "help":

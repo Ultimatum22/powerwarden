@@ -20,9 +20,6 @@ import (
 func fakeProxmoxServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api2/json/nodes/pve01/status", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]any{"data": map[string]any{"uptime": 999}})
-	})
 	mux.HandleFunc("/api2/json/cluster/resources", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{
 			"data": []map[string]any{
@@ -33,6 +30,22 @@ func fakeProxmoxServer(t *testing.T) *httptest.Server {
 	})
 	mux.HandleFunc("/api2/json/nodes/pve01/qemu/201/status/start", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"data": "UPID:pve01:started"})
+	})
+	mux.HandleFunc("/api2/json/nodes/pve01/qemu/201/status/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"data": "UPID:pve01:guest-shutdown"})
+	})
+	mux.HandleFunc("/api2/json/nodes/pve01/tasks", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"data": []map[string]any{}}) // no active tasks
+	})
+	mux.HandleFunc("/api2/json/nodes/pve01/status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			writeJSON(w, map[string]any{"data": "UPID:pve01:host-shutdown"})
+			return
+		}
+		writeJSON(w, map[string]any{"data": map[string]any{"uptime": 999}})
+	})
+	mux.HandleFunc("/api2/json/nodes/pve01/tasks/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"data": map[string]any{"status": "stopped", "exitstatus": "OK"}})
 	})
 	return httptest.NewTLSServer(mux)
 }
@@ -88,14 +101,20 @@ schedules:
     - { days: mon-fri, on: "07:00", off: "01:00" }
   evenings:
     - { days: mon-sun, on: "17:00", off: "00:30" }
+  alwayson:
+    - { days: mon-sun, on: "00:00", off: "00:00" }
 
 host:
-  schedule: daytime
+  schedule: alwayson
   shutdown_grace: 10m
 
 guests:
   lxc-forge: { always_on: true }
   vm-media: { schedule: evenings, depends_on: [] }
+
+notify:
+  provider: ntfy
+  url: https://ntfy.sh/labpower-test
 `
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(yaml), 0o600); err != nil {

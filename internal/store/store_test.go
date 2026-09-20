@@ -68,6 +68,25 @@ func TestStateGetSetUpsert(t *testing.T) {
 	}
 }
 
+func TestStateDelete(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	if err := s.SetState(ctx, "host_wake_attempts", "2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteState(ctx, "host_wake_attempts"); err != nil {
+		t.Fatalf("DeleteState: %v", err)
+	}
+	if _, ok, err := s.GetState(ctx, "host_wake_attempts"); err != nil || ok {
+		t.Fatalf("expected the key to be unset after delete, got ok=%v err=%v", ok, err)
+	}
+	// Deleting an already-absent key is not an error.
+	if err := s.DeleteState(ctx, "never_set"); err != nil {
+		t.Fatalf("DeleteState on absent key: %v", err)
+	}
+}
+
 func TestOverrideActiveWithinWindow(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

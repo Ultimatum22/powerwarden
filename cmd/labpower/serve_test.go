@@ -51,11 +51,15 @@ schedules:
     - { days: mon-sun, on: "00:00", off: "00:00" }
 
 host:
-  schedule: daytime
+  schedule: alwayson
   shutdown_grace: 10m
 
 guests:
   vm-media: { schedule: alwayson, depends_on: [] }
+
+notify:
+  provider: ntfy
+  url: https://ntfy.sh/labpower-test
 `
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(yaml), 0o600); err != nil {

@@ -207,6 +207,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateSchedules()...)
 	errs = append(errs, c.validateHost()...)
 	errs = append(errs, c.validateGuests()...)
+	errs = append(errs, c.validateNotify()...)
 
 	return joinNonNil(errs)
 }
@@ -247,6 +248,29 @@ func (c *Config) validateProxmox() []error {
 		errs = append(errs, fmt.Errorf("proxmox.token_secret_file is required"))
 	} else if err := fileExists(c.Proxmox.TokenSecretFile); err != nil {
 		errs = append(errs, fmt.Errorf("proxmox.token_secret_file: %w", err))
+	}
+	return errs
+}
+
+func (c *Config) validateNotify() []error {
+	var errs []error
+	switch c.Notify.Provider {
+	case "ntfy":
+	case "":
+		errs = append(errs, fmt.Errorf("notify.provider is required (currently only \"ntfy\" is supported)"))
+	default:
+		errs = append(errs, fmt.Errorf("notify.provider %q is not supported (currently only \"ntfy\" is)", c.Notify.Provider))
+	}
+	if c.Notify.URL == "" {
+		errs = append(errs, fmt.Errorf("notify.url is required"))
+	} else if u, err := url.Parse(c.Notify.URL); err != nil || u.Scheme != "https" {
+		errs = append(errs, fmt.Errorf("notify.url %q must be a valid https URL (a notifier outside the homelab)", c.Notify.URL))
+	}
+	// notify.token_file is optional: some ntfy topics are unauthenticated.
+	if c.Notify.TokenFile != "" {
+		if err := fileExists(c.Notify.TokenFile); err != nil {
+			errs = append(errs, fmt.Errorf("notify.token_file: %w", err))
+		}
 	}
 	return errs
 }

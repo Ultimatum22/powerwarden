@@ -11,6 +11,28 @@ import (
 	"github.com/Ultimatum22/powerwarden/internal/store"
 )
 
+// anyGuestWantsOn reports whether any non-always-on guest's schedule or
+// override currently calls for it to be on. It doesn't look at actual
+// Proxmox state at all (so it works even while the host — and therefore
+// every guest — is unreachable), which is what lets the host state machine
+// decide whether to wake up without needing to reach the guests first.
+func (e *Engine) anyGuestWantsOn(ctx context.Context, now time.Time) (bool, error) {
+	for _, g := range e.Guests {
+		if g.AlwaysOn {
+			continue
+		}
+		ov, err := e.Store.EffectiveOverride(ctx, g.Name, now)
+		if err != nil {
+			return false, fmt.Errorf("engine: effective override for %q: %w", g.Name, err)
+		}
+		desired, act := desiredState(ov, e.Schedules[g.Schedule], now, e.Loc)
+		if act && desired {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // plannedAction is one guest start or shutdown this tick decided to make.
 type plannedAction struct {
 	guest    GuestConfig
@@ -201,11 +223,13 @@ func (e *Engine) waitForTask(ctx context.Context, upid proxmox.UPID) error {
 	}
 }
 
-// topologicalOrder returns guest names ordered so every guest appears
+// TopologicalOrder returns guest names ordered so every guest appears
 // after everything it depends_on. Config validation already rejects
 // cycles, but this is re-checked here so Engine can be constructed
-// directly (e.g. in tests) without going through config.
-func topologicalOrder(guests []GuestConfig) ([]string, error) {
+// directly (e.g. in tests) without going through config. It's exported so
+// the CLI's `host shutdown` command can shut guests down in the same
+// dependency-respecting order the engine itself uses.
+func TopologicalOrder(guests []GuestConfig) ([]string, error) {
 	byName := make(map[string]GuestConfig, len(guests))
 	for _, g := range guests {
 		byName[g.Name] = g
