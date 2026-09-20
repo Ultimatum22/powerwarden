@@ -1,0 +1,11 @@
+# SHA-256 checksums of vendored third-party static assets (CLAUDE.md:
+# "Pin htmx and fonts by checksum in the repo"). Verify after any update:
+#   sha256sum -c web/static/CHECKSUMS.txt
+#
+# htmx.org 2.0.4, https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js
+e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447  htmx.min.js
+
+# Self-hosted fonts (Space Grotesk, IBM Plex Sans, IBM Plex Mono, SIL OFL
+# licensed) are not yet vendored — app.css currently falls back to system
+# font stacks, which CLAUDE.md's design tokens explicitly allow ("Fallback
+# to system stacks"). Add their woff2 files and checksums here once vendored.

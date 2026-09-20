@@ -1,0 +1,44 @@
+[Unit]
+Description=labpower — LabyrinthStack power manager
+Documentation=https://github.com/Ultimatum22/powerwarden
+After=network-online.target
+Wants=network-online.target
+# labpower must work while the Proxmox host is off (it's what wakes it),
+# so it deliberately does not depend on anything on the management VLAN.
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/labpower serve -config /etc/labpower/config.yaml
+Restart=on-failure
+RestartSec=5s
+
+# --- State and secrets ---
+DynamicUser=yes
+StateDirectory=labpower
+LoadCredential=proxmox-token:/etc/labpower/proxmox-token
+LoadCredential=notify-token:/etc/labpower/notify-token
+
+# --- Sandboxing (CLAUDE.md: "Deployment hardening") ---
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=no            # needs /dev/i2c-1 and GPIO; granted via DeviceAllow below
+DeviceAllow=/dev/i2c-1 rw
+DeviceAllow=/dev/gpiochip0 rw
+SupplementaryGroups=i2c gpio
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+MemoryMax=150M
+
+[Install]
+WantedBy=multi-user.target

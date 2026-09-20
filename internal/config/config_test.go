@@ -155,6 +155,26 @@ func TestAlwaysOnWithScheduleRejected(t *testing.T) {
 	}
 }
 
+func TestTokenSecretFileExpandsEnvVars(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "proxmox-token"), []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CREDENTIALS_DIRECTORY", dir)
+
+	yaml := validYAML("${CREDENTIALS_DIRECTORY}/proxmox-token")
+	c, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if c.Proxmox.TokenSecretFile != filepath.Join(dir, "proxmox-token") {
+		t.Fatalf("TokenSecretFile = %q, want the expanded path", c.Proxmox.TokenSecretFile)
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
 func TestMissingSecretFileRejected(t *testing.T) {
 	yaml := validYAML("/nonexistent/proxmox-token")
 	c, err := Parse([]byte(yaml))

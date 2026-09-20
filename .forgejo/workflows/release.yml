@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Install lint/vuln tools
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      # make release runs the full check suite (gofmt, vet, test -race,
+      # staticcheck, govulncheck) before cross-compiling, so a broken
+      # tag never gets published.
+      - name: make release
+        run: make release
+        env:
+          VERSION: ${{ github.ref_name }}
+
+      - name: Publish release with binary + checksum
+        uses: https://code.forgejo.org/actions/forgejo-release@v2
+        with:
+          direction: upload
+          url: ${{ github.server_url }}
+          repo: ${{ github.repository }}
+          release-dir: bin
+          release-notes: "labpower ${{ github.ref_name }}, built for linux/arm64 (Raspberry Pi OS Lite 64-bit)."
+          token: ${{ secrets.RELEASE_TOKEN }}

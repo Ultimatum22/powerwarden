@@ -171,6 +171,15 @@ func Parse(data []byte) (*Config, error) {
 	if err := dec.Decode(&c); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+
+	// The example config (and systemd's LoadCredential= convention) uses
+	// ${CREDENTIALS_DIRECTORY}/name for secret paths, since that
+	// directory is only known at runtime; expand it (and any other env
+	// reference) the same way a shell would, rather than reading it as a
+	// literal, nonexistent path.
+	c.Proxmox.TokenSecretFile = os.ExpandEnv(c.Proxmox.TokenSecretFile)
+	c.Notify.TokenFile = os.ExpandEnv(c.Notify.TokenFile)
+
 	return &c, nil
 }
 
