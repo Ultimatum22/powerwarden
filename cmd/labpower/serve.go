@@ -15,7 +15,9 @@ import (
 	"github.com/Ultimatum22/powerwarden/internal/engine"
 	"github.com/Ultimatum22/powerwarden/internal/notify"
 	"github.com/Ultimatum22/powerwarden/internal/schedule"
+	"github.com/Ultimatum22/powerwarden/internal/sensor/as3935"
 	"github.com/Ultimatum22/powerwarden/internal/store"
+	"github.com/Ultimatum22/powerwarden/internal/weather"
 	"github.com/Ultimatum22/powerwarden/internal/wol"
 )
 
@@ -71,6 +73,12 @@ func runServe(ctx context.Context, args []string, logger *slog.Logger) error {
 		return err
 	}
 
+	weatherCfg := newWeatherMonitorConfig(cfg, logger)
+	weatherMonitor := weather.NewMonitor(weatherCfg, clock.Real{}.Now())
+	if watcher, ok := weatherCfg.Local.(*as3935.Watcher); ok {
+		go watcher.Run(ctx)
+	}
+
 	eng, err := engine.New(engine.Config{
 		Clock:   clock.Real{},
 		Proxmox: proxmoxClient,
@@ -92,6 +100,7 @@ func runServe(ctx context.Context, args []string, logger *slog.Logger) error {
 		WoLWakeTimeout: cfg.WoL.WakeTimeout,
 
 		Notifier: notifier,
+		Weather:  weatherMonitor,
 	})
 	if err != nil {
 		return err

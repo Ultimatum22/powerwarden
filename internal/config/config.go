@@ -108,6 +108,12 @@ type Weather struct {
 		Bus     string `yaml:"bus"`
 		Address uint8  `yaml:"address"`
 		IRQGPIO int    `yaml:"irq_gpio"`
+		// CorroborationWindow is how close together two local detections
+		// must land to count as confirmed on their own, since the AS3935
+		// is noisy (CLAUDE.md: "two local detections occur within 5
+		// minutes... make this configurable"). Zero uses a 5-minute
+		// default.
+		CorroborationWindow time.Duration `yaml:"corroboration_window"`
 	} `yaml:"local_sensor"`
 	Warnings struct {
 		Provider string `yaml:"provider"`
@@ -208,6 +214,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateHost()...)
 	errs = append(errs, c.validateGuests()...)
 	errs = append(errs, c.validateNotify()...)
+	errs = append(errs, c.validateWeather()...)
 
 	return joinNonNil(errs)
 }
@@ -270,6 +277,45 @@ func (c *Config) validateNotify() []error {
 	if c.Notify.TokenFile != "" {
 		if err := fileExists(c.Notify.TokenFile); err != nil {
 			errs = append(errs, fmt.Errorf("notify.token_file: %w", err))
+		}
+	}
+	return errs
+}
+
+func (c *Config) validateWeather() []error {
+	var errs []error
+	switch c.Weather.Mode {
+	case "", "notify", "enforce":
+	default:
+		errs = append(errs, fmt.Errorf("weather.mode %q must be \"notify\" or \"enforce\"", c.Weather.Mode))
+	}
+
+	if c.Weather.Warnings.Provider != "" && c.Weather.Warnings.Provider != "meteoalarm" {
+		errs = append(errs, fmt.Errorf("weather.warnings.provider %q is not supported (currently only \"meteoalarm\" is)", c.Weather.Warnings.Provider))
+	}
+	if c.Weather.Forecast.Provider != "" && c.Weather.Forecast.Provider != "open-meteo" {
+		errs = append(errs, fmt.Errorf("weather.forecast.provider %q is not supported (currently only \"open-meteo\" is)", c.Weather.Forecast.Provider))
+	}
+
+	if c.Weather.LightningNetwork.Enabled {
+		warn, danger := c.Weather.Levels.Warning.StrikeRadiusKM, c.Weather.Levels.Danger.StrikeRadiusKM
+		if warn <= 0 {
+			errs = append(errs, fmt.Errorf("weather.levels.warning.strike_radius_km must be positive when lightning_network is enabled"))
+		}
+		if danger <= 0 {
+			errs = append(errs, fmt.Errorf("weather.levels.danger.strike_radius_km must be positive when lightning_network is enabled"))
+		}
+		if warn > 0 && danger > 0 && danger > warn {
+			errs = append(errs, fmt.Errorf("weather.levels.danger.strike_radius_km (%.1f) must not exceed warning.strike_radius_km (%.1f)", danger, warn))
+		}
+	}
+
+	if c.Weather.LocalSensor.Enabled {
+		if c.Weather.LocalSensor.Bus == "" {
+			errs = append(errs, fmt.Errorf("weather.local_sensor.bus is required when local_sensor is enabled"))
+		}
+		if c.Weather.LocalSensor.IRQGPIO <= 0 {
+			errs = append(errs, fmt.Errorf("weather.local_sensor.irq_gpio is required when local_sensor is enabled"))
 		}
 	}
 	return errs

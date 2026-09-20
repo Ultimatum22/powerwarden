@@ -1,12 +1,13 @@
 // Package engine is the scheduler: it ticks periodically, decides what
 // should change based on schedules and overrides, and drives guests and
 // the host through internal/proxmox and internal/wol. It depends only on
-// interfaces (clock, Proxmox, WoL, notify, store) so a full week can be
-// simulated in milliseconds — see internal/engine's tests and CLAUDE.md's
-// "Scheduling engine" section.
+// interfaces (clock, Proxmox, WoL, notify, weather, store) so a full week
+// can be simulated in milliseconds — see internal/engine's tests and
+// CLAUDE.md's "Scheduling engine" section.
 //
-// The weather safeguard is built on top of the same Tick in a later
-// milestone.
+// Weather ships notify-only in this milestone: Tick reports level changes
+// as events and notifications, but nothing here gates a host or guest
+// decision on it yet — that arrives with the weather-enforce milestone.
 package engine
 
 import (
@@ -22,6 +23,7 @@ import (
 	"github.com/Ultimatum22/powerwarden/internal/proxmox"
 	"github.com/Ultimatum22/powerwarden/internal/schedule"
 	"github.com/Ultimatum22/powerwarden/internal/store"
+	"github.com/Ultimatum22/powerwarden/internal/weather"
 	"github.com/Ultimatum22/powerwarden/internal/wol"
 )
 
@@ -68,6 +70,9 @@ type Config struct {
 
 	Notifier notify.Notifier
 
+	// Weather is optional; nil disables weather monitoring entirely.
+	Weather *weather.Monitor
+
 	// TaskPollInterval and TaskTimeout control how long Tick waits for a
 	// Proxmox task (start/shutdown) to finish before giving up. Zero means
 	// use the defaults; tests shrink TaskPollInterval to keep the fake
@@ -112,6 +117,8 @@ func (e *Engine) Tick(ctx context.Context) error {
 		return nil
 	}
 	now := e.Clock.Now()
+
+	e.reconcileWeather(ctx, now) // best-effort: notify-only, never blocks host/guest logic
 
 	lastTickStr, hasLastTick, err := e.Store.GetState(ctx, lastTickKey)
 	if err != nil {

@@ -225,6 +225,85 @@ func TestUnknownFieldRejected(t *testing.T) {
 	}
 }
 
+func TestWeatherValidation(t *testing.T) {
+	secret := writeSecret(t)
+	tests := []struct {
+		name    string
+		extra   string
+		wantErr string
+	}{
+		{
+			name:    "bad mode",
+			extra:   "weather:\n  mode: destroy\n",
+			wantErr: "weather.mode",
+		},
+		{
+			name:    "unsupported warnings provider",
+			extra:   "weather:\n  warnings: { provider: accuweather }\n",
+			wantErr: "weather.warnings.provider",
+		},
+		{
+			name:    "unsupported forecast provider",
+			extra:   "weather:\n  forecast: { provider: darksky }\n",
+			wantErr: "weather.forecast.provider",
+		},
+		{
+			name:    "lightning enabled without radii",
+			extra:   "weather:\n  lightning_network: { enabled: true }\n",
+			wantErr: "strike_radius_km",
+		},
+		{
+			name: "danger radius exceeds warning radius",
+			extra: "weather:\n  lightning_network: { enabled: true }\n" +
+				"  levels: { warning: { strike_radius_km: 10 }, danger: { strike_radius_km: 20 } }\n",
+			wantErr: "must not exceed",
+		},
+		{
+			name:    "local sensor enabled without bus",
+			extra:   "weather:\n  local_sensor: { enabled: true, irq_gpio: 17 }\n",
+			wantErr: "weather.local_sensor.bus",
+		},
+		{
+			name:    "local sensor enabled without irq_gpio",
+			extra:   "weather:\n  local_sensor: { enabled: true, bus: /dev/i2c-1 }\n",
+			wantErr: "weather.local_sensor.irq_gpio",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			yaml := validYAML(secret) + tt.extra
+			c, err := Parse([]byte(yaml))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if err := c.Validate(); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected error containing %q, got: %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestWeatherValidConfigWithLightningAndSensorPasses(t *testing.T) {
+	secret := writeSecret(t)
+	yaml := validYAML(secret) + `weather:
+  mode: notify
+  lightning_network: { enabled: true }
+  local_sensor: { enabled: true, bus: /dev/i2c-1, irq_gpio: 17, corroboration_window: 5m }
+  warnings: { provider: meteoalarm, region: netherlands }
+  forecast: { provider: open-meteo }
+  levels:
+    warning: { strike_radius_km: 30 }
+    danger: { strike_radius_km: 12 }
+`
+	c, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
 func TestRouterAPIRequiresURL(t *testing.T) {
 	secret := writeSecret(t)
 	yaml := strings.Replace(validYAML(secret), "method: unicast", "method: router_api", 1)

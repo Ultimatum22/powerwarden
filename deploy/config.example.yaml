@@ -53,7 +53,7 @@ guests:
 weather:
   location: { lat: 0.00, lon: 0.00 } # TODO(owner): 2 decimals is enough
   lightning_network: { enabled: true }
-  local_sensor: { enabled: true, bus: /dev/i2c-1, address: 0x03, irq_gpio: 17 }
+  local_sensor: { enabled: true, bus: /dev/i2c-1, address: 0x03, irq_gpio: 17, corroboration_window: 5m }
   warnings: { provider: meteoalarm, region: "TODO" }
   forecast: { provider: open-meteo, interval: 30m }
   levels:
