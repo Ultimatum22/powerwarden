@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Ultimatum22/powerwarden/internal/schedule"
 	"gopkg.in/yaml.v3"
 )
 
@@ -283,11 +284,6 @@ func (c *Config) validateWoL() []error {
 	return errs
 }
 
-var validDaySpecs = map[string]bool{
-	"mon-fri": true, "sat-sun": true, "mon-sun": true,
-	"mon": true, "tue": true, "wed": true, "thu": true, "fri": true, "sat": true, "sun": true,
-}
-
 func (c *Config) validateSchedules() []error {
 	var errs []error
 	for name, windows := range c.Schedules {
@@ -295,14 +291,8 @@ func (c *Config) validateSchedules() []error {
 			errs = append(errs, fmt.Errorf("schedules.%s has no windows", name))
 		}
 		for i, w := range windows {
-			if !validDaySpecs[w.Days] {
-				errs = append(errs, fmt.Errorf("schedules.%s[%d].days %q is not a recognized day spec", name, i, w.Days))
-			}
-			if _, err := parseClock(w.On); err != nil {
-				errs = append(errs, fmt.Errorf("schedules.%s[%d].on %q: %w", name, i, w.On, err))
-			}
-			if _, err := parseClock(w.Off); err != nil {
-				errs = append(errs, fmt.Errorf("schedules.%s[%d].off %q: %w", name, i, w.Off, err))
+			if _, err := schedule.NewWindow(w.Days, w.On, w.Off); err != nil {
+				errs = append(errs, fmt.Errorf("schedules.%s[%d]: %w", name, i, err))
 			}
 		}
 	}
@@ -310,28 +300,20 @@ func (c *Config) validateSchedules() []error {
 		if rw.Name == "" {
 			errs = append(errs, fmt.Errorf("required_windows[%d].name is required", i))
 		}
-		if !validDaySpecs[rw.Days] {
-			errs = append(errs, fmt.Errorf("required_windows[%d].days %q is not a recognized day spec", i, rw.Days))
+		if _, err := schedule.ParseDays(rw.Days); err != nil {
+			errs = append(errs, fmt.Errorf("required_windows[%d]: %w", i, err))
 		}
-		if _, err := parseClock(rw.From); err != nil {
-			errs = append(errs, fmt.Errorf("required_windows[%d].from %q: %w", i, rw.From, err))
+		if _, err := schedule.ParseTimeOfDay(rw.From); err != nil {
+			errs = append(errs, fmt.Errorf("required_windows[%d].from: %w", i, err))
 		}
-		if _, err := parseClock(rw.To); err != nil {
-			errs = append(errs, fmt.Errorf("required_windows[%d].to %q: %w", i, rw.To, err))
+		if _, err := schedule.ParseTimeOfDay(rw.To); err != nil {
+			errs = append(errs, fmt.Errorf("required_windows[%d].to: %w", i, err))
 		}
 	}
 	// Whether each required_window actually falls inside the host's
-	// schedule is checked once internal/schedule exists (milestone 2);
-	// that needs real window-boundary math, not a string comparison.
+	// schedule is a cross-check the engine performs at load time
+	// (milestone 4, once the host state machine exists), not here.
 	return errs
-}
-
-func parseClock(s string) (time.Duration, error) {
-	t, err := time.Parse("15:04", s)
-	if err != nil {
-		return 0, fmt.Errorf("must be HH:MM")
-	}
-	return time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute, nil
 }
 
 func (c *Config) validateHost() []error {

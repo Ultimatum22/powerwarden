@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 	_ "time/tzdata" // embed the IANA database so timezones work on any OS image
 )
 
@@ -18,7 +20,11 @@ var version = "dev"
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if err := run(context.Background(), os.Args[1:], logger); err != nil {
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := run(ctx, os.Args[1:], logger); err != nil {
 		if !errors.Is(err, errUsage) {
 			logger.Error(err.Error())
 		}
@@ -41,7 +47,7 @@ Commands:
   wake                  Send a Wake-on-LAN packet to the host
   guest start <name>    Start a guest now
   guest stop <name>     Stop a guest now
-  serve                 Run the scheduler and web UI (not yet implemented)
+  serve                 Run the guest scheduler (web UI not yet implemented)
   host shutdown         Shut down the Proxmox host (not yet implemented)
   enrol                 Print a first-run enrolment token (not yet implemented)
 
@@ -65,7 +71,9 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 		return runWake(ctx, rest, logger)
 	case "guest":
 		return runGuest(ctx, rest, logger)
-	case "serve", "host", "enrol":
+	case "serve":
+		return runServe(ctx, rest, logger)
+	case "host", "enrol":
 		fmt.Fprintf(os.Stderr, "labpower %s: not implemented yet (planned for a later milestone; see CLAUDE.md)\n", cmd)
 		return errUsage
 	case "-h", "-help", "--help", "help":
