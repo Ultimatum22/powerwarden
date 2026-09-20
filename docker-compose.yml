@@ -1,0 +1,87 @@
+# Docker packaging for labpower, alongside (not instead of) the systemd
+# unit in deploy/labpower.service — see deploy/README.md for the tradeoffs.
+#
+# Before first run:
+#   cp deploy/config.example.yaml config.yaml   # then fill in every TODO(owner)
+#   mkdir -p secrets
+#   echo -n '<proxmox token secret>' > secrets/proxmox-token
+#   echo -n '<ntfy token>'           > secrets/notify-token
+#
+# Then: docker compose up -d --build
+
+services:
+  # One-shot: fixes the labpower-state volume's ownership to match the
+  # distroless image's nonroot user (UID/GID 65532) before labpower
+  # starts. A fresh named volume is created root-owned, and the labpower
+  # container itself has no shell/chown to fix that from the inside.
+  init-state-dir:
+    image: busybox:latest
+    command: ["chown", "-R", "65532:65532", "/var/lib/labpower"]
+    volumes:
+      - labpower-state:/var/lib/labpower
+
+  labpower:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
+    image: labpower:${VERSION:-dev}
+    container_name: labpower
+    restart: unless-stopped
+    depends_on:
+      init-state-dir:
+        condition: service_completed_successfully
+
+    # labpower must bind to 127.0.0.1 only and never be reachable except
+    # through Newt/Pangolin (CLAUDE.md's core security requirement).
+    # host networking is what makes that true in a container the same way
+    # it's true for the systemd deployment: the container's 127.0.0.1 *is*
+    # the Pi's 127.0.0.1, not an isolated bridge network's loopback that
+    # Docker's usual `ports:` publishing would expose differently. Don't
+    # replace this with a bridge network + `ports:` mapping without
+    # re-reading why config.yaml's `listen` is validated as loopback-only.
+    network_mode: host
+
+    # Only needed if weather.local_sensor.enabled: true (the AS3935
+    # sensor). Remove both if running without the physical sensor, or on
+    # a host where devices don't exist under these exact paths.
+    devices:
+      - /dev/i2c-1:/dev/i2c-1
+      - /dev/gpiochip0:/dev/gpiochip0
+    # GIDs for the host's i2c/gpio groups — check with `getent group i2c
+    # gpio` on the Pi and adjust; these are Raspberry Pi OS's usual values.
+    group_add:
+      - "998" # i2c
+      - "997" # gpio
+
+    volumes:
+      - ./config.yaml:/etc/labpower/config.yaml:ro
+      - labpower-state:/var/lib/labpower
+
+    secrets:
+      - proxmox-token
+      - notify-token
+    environment:
+      # Docker Compose secrets mount at /run/secrets/<name>, which lines
+      # up with config.yaml's ${CREDENTIALS_DIRECTORY}/<name> exactly the
+      # way systemd's LoadCredential= does — the same config.yaml works
+      # unmodified under either deployment method.
+      - CREDENTIALS_DIRECTORY=/run/secrets
+      - STATE_DIRECTORY=/var/lib/labpower
+
+    command: ["serve", "-config", "/etc/labpower/config.yaml"]
+
+    # No Docker HEALTHCHECK: the distroless image has no curl/wget to hit
+    # GET /healthz with, and `labpower status` isn't a substitute — it
+    # calls out to Proxmox, so it would report "unhealthy" whenever the
+    # host is legitimately powered off, which is a normal, fully-handled
+    # state for this service, not a failure of it.
+
+volumes:
+  labpower-state:
+
+secrets:
+  proxmox-token:
+    file: ./secrets/proxmox-token
+  notify-token:
+    file: ./secrets/notify-token

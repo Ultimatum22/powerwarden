@@ -1,3 +1,7 @@
 /bin/
 *.test
 .idea/
+
+# Runtime config/secrets for local docker-compose use — deploy/config.example.yaml is the template.
+/config.yaml
+/secrets/
