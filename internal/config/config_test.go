@@ -51,6 +51,11 @@ guests:
 notify:
   provider: ntfy
   url: https://ntfy.sh/labpower-test
+
+auth:
+  rp_id: localhost
+  session_idle: 30m
+  session_absolute: 12h
 `
 }
 

@@ -215,6 +215,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateGuests()...)
 	errs = append(errs, c.validateNotify()...)
 	errs = append(errs, c.validateWeather()...)
+	errs = append(errs, c.validateAuth()...)
 
 	return joinNonNil(errs)
 }
@@ -317,6 +318,23 @@ func (c *Config) validateWeather() []error {
 		if c.Weather.LocalSensor.IRQGPIO <= 0 {
 			errs = append(errs, fmt.Errorf("weather.local_sensor.irq_gpio is required when local_sensor is enabled"))
 		}
+	}
+	return errs
+}
+
+func (c *Config) validateAuth() []error {
+	var errs []error
+	if c.Auth.RPID == "" {
+		errs = append(errs, fmt.Errorf("auth.rp_id is required (the WebAuthn relying party ID)"))
+	}
+	if c.Auth.SessionIdle <= 0 {
+		errs = append(errs, fmt.Errorf("auth.session_idle must be positive"))
+	}
+	if c.Auth.SessionAbsolute <= 0 {
+		errs = append(errs, fmt.Errorf("auth.session_absolute must be positive"))
+	}
+	if c.Auth.SessionIdle > 0 && c.Auth.SessionAbsolute > 0 && c.Auth.SessionIdle > c.Auth.SessionAbsolute {
+		errs = append(errs, fmt.Errorf("auth.session_idle must not exceed auth.session_absolute"))
 	}
 	return errs
 }

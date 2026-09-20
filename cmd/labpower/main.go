@@ -49,7 +49,7 @@ Commands:
   guest stop <name>     Stop a guest now
   serve                 Run the scheduler (web UI not yet implemented)
   host shutdown         Shut down the Proxmox host
-  enrol                 Print a first-run enrolment token (not yet implemented)
+  enrol                 Print a first-run enrolment link (valid 15 minutes)
 
 Global flags (place after the command):
   -config path   Path to config.yaml (default: /etc/labpower/config.yaml)
@@ -76,8 +76,7 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 	case "host":
 		return runHost(ctx, rest, logger)
 	case "enrol":
-		fmt.Fprintf(os.Stderr, "labpower %s: not implemented yet (planned for a later milestone; see CLAUDE.md)\n", cmd)
-		return errUsage
+		return runEnrol(ctx, rest, logger)
 	case "-h", "-help", "--help", "help":
 		fmt.Fprint(os.Stderr, topLevelUsage)
 		return nil

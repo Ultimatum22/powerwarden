@@ -78,7 +78,7 @@ func writeTestConfig(t *testing.T, srv *httptest.Server, dryRun bool) string {
 	yaml := `
 dry_run: ` + boolStr(dryRun) + `
 timezone: Europe/Amsterdam
-listen: 127.0.0.1:8080
+listen: 127.0.0.1:0
 public_url: https://power.example.com
 trusted_proxy: 127.0.0.1
 
@@ -115,6 +115,11 @@ guests:
 notify:
   provider: ntfy
   url: https://ntfy.sh/labpower-test
+
+auth:
+  rp_id: localhost
+  session_idle: 30m
+  session_absolute: 12h
 `
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(yaml), 0o600); err != nil {
