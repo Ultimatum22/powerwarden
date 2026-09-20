@@ -1,0 +1,75 @@
+# Example labpower configuration. Copy to config.yaml and fill in every
+# TODO(owner) value — see CLAUDE.md for what each one means. Never commit
+# the filled-in version if it contains anything secret (it shouldn't: all
+# secrets are read from token_secret_file / token_file at runtime).
+
+dry_run: true
+timezone: Europe/Amsterdam # TODO(owner): confirm
+listen: 127.0.0.1:8080
+public_url: https://power.example.com # TODO(owner): Pangolin hostname
+trusted_proxy: 127.0.0.1 # only trust X-Forwarded-For from Newt
+
+proxmox:
+  url: https://10.22.10.X:8006 # TODO(owner)
+  node: pve01 # TODO(owner)
+  token_id: labpower@pve!pi
+  token_secret_file: ${CREDENTIALS_DIRECTORY}/proxmox-token
+  tls_fingerprint: "AB:CD:…" # pin the self-signed cert; never skip verification
+
+wol:
+  method: unicast # router_api | unicast | broadcast — TODO(owner)
+  mac: "aa:bb:cc:dd:ee:ff" # TODO(owner)
+  target: 10.22.10.250 # unicast: static-ARP IP; broadcast: 10.22.10.255
+  retries: 3
+  wake_timeout: 5m
+  # Only used when method: router_api. The exact API is TODO(owner) until
+  # the router/firewall model is known; URL and body may reference {{.MAC}}.
+  router_api:
+    url: "" # e.g. https://router.local/api/wol?mac={{.MAC}}
+    method: POST
+    headers: {}
+    body: ""
+
+schedules:
+  daytime:
+    - { days: mon-fri, on: "07:00", off: "01:00" }
+    - { days: sat-sun, on: "09:00", off: "01:30" }
+  evenings:
+    - { days: mon-sun, on: "17:00", off: "00:30" }
+
+required_windows: # validation warns if the host is off during these
+  - { name: trivy, days: mon, from: "05:30", to: "07:00" } # 04:00 UTC in CEST — TODO(owner)
+
+host:
+  schedule: daytime
+  shutdown_grace: 10m
+
+guests:
+  lxc-forge: { always_on: true }
+  lxc-edge: { always_on: true }
+  vm-media: { schedule: evenings, depends_on: [] }
+  # TODO(owner): the full list of guests to schedule.
+
+weather:
+  location: { lat: 0.00, lon: 0.00 } # TODO(owner): 2 decimals is enough
+  lightning_network: { enabled: true }
+  local_sensor: { enabled: true, bus: /dev/i2c-1, address: 0x03, irq_gpio: 17 }
+  warnings: { provider: meteoalarm, region: "TODO" }
+  forecast: { provider: open-meteo, interval: 30m }
+  levels:
+    warning: { strike_radius_km: 30, countdown: 10m }
+    danger: { strike_radius_km: 12 }
+    all_clear_after: 30m
+  on_stale_data: shutdown_if_elevated
+  stale_after: 10m
+  mode: notify # notify | enforce — ships notify-only; see milestone 7
+
+notify:
+  provider: ntfy # must be outside the homelab
+  url: https://ntfy.sh/TODO
+  token_file: ${CREDENTIALS_DIRECTORY}/notify-token
+
+auth:
+  rp_id: power.example.com # WebAuthn relying party
+  session_idle: 30m
+  session_absolute: 12h
