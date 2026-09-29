@@ -4,12 +4,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/go-webauthn/webauthn/webauthn"
 
 	"github.com/Ultimatum22/powerwarden/internal/auth"
+	"github.com/Ultimatum22/powerwarden/internal/notify"
 	"github.com/Ultimatum22/powerwarden/internal/store"
 )
 
@@ -131,20 +133,72 @@ func (s *Server) finishLogin(w http.ResponseWriter, r *http.Request, userID stri
 	}
 	s.LoginLimiter.Success("ip:" + s.clientIP(r))
 	http.SetCookie(w, s.Sessions.Cookie(raw, int(s.Sessions.AbsoluteTimeout.Seconds())))
+	actor, ip := "user:"+userID, s.clientIP(r)
+	// Checked before recording this login, so "seen" means a previous one.
+	seen, err := s.Store.HasEvent(r.Context(), "login_ok", actor, ip)
+	if err != nil {
+		s.Logger.Error("web: check login history", "error", err)
+		seen = true // don't alert on a lookup failure; the login itself is logged
+	}
 	_ = s.Store.RecordEvent(r.Context(), store.Event{
-		At: now, Kind: "login_ok", Actor: "user:" + userID, IP: s.clientIP(r),
+		At: now, Kind: "login_ok", Actor: actor, IP: ip,
 	})
+	if !seen {
+		s.notify(r, notify.Notification{
+			Title:    "labpower: sign-in from a new IP",
+			Body:     fmt.Sprintf("Signed in from %s (%s), not seen in the last 90 days. If this wasn't you, revoke the session under Security.", ip, r.UserAgent()),
+			Priority: notify.PriorityHigh,
+		})
+	}
 	writeJSON(w, map[string]any{"ok": true, "redirect": "/"})
 }
+
+// Failed-login burst alerting (CLAUDE.md: "Notify on ... failed-login
+// bursts"): at most one alert per window once the count within it
+// reaches the threshold.
+const (
+	failBurstWindow    = 10 * time.Minute
+	failBurstThreshold = 5
+	failBurstStateKey  = "auth.fail_burst_notified_at"
+)
 
 func (s *Server) recordLoginFailure(r *http.Request, userID string) {
 	actor := "unknown"
 	if userID != "" {
 		actor = "user:" + userID
 	}
+	now := s.Clock.Now()
 	_ = s.Store.RecordEvent(r.Context(), store.Event{
-		At: s.Clock.Now(), Kind: "login_fail", Actor: actor, IP: s.clientIP(r),
+		At: now, Kind: "login_fail", Actor: actor, IP: s.clientIP(r),
 	})
+
+	n, err := s.Store.CountEventsSince(r.Context(), "login_fail", now.Add(-failBurstWindow))
+	if err != nil || n < failBurstThreshold {
+		return
+	}
+	if last, ok, _ := s.Store.GetState(r.Context(), failBurstStateKey); ok {
+		if t, err := time.Parse(time.RFC3339, last); err == nil && now.Sub(t) < failBurstWindow {
+			return
+		}
+	}
+	_ = s.Store.SetState(r.Context(), failBurstStateKey, now.Format(time.RFC3339))
+	s.Logger.Warn("web: failed-login burst", "count", n, "window", failBurstWindow, "last_ip", s.clientIP(r))
+	s.notify(r, notify.Notification{
+		Title:    "labpower: repeated failed sign-ins",
+		Body:     fmt.Sprintf("%d failed sign-in attempts in the last %s, most recently from %s. Rate limiting is active.", n, failBurstWindow, s.clientIP(r)),
+		Priority: notify.PriorityHigh,
+	})
+}
+
+// notify sends best-effort: a delivery failure is logged, never shown to
+// the user or allowed to fail the request.
+func (s *Server) notify(r *http.Request, n notify.Notification) {
+	if s.Notifier == nil {
+		return
+	}
+	if err := s.Notifier.Notify(r.Context(), n); err != nil {
+		s.Logger.Warn("web: notification failed", "title", n.Title, "error", err)
+	}
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {

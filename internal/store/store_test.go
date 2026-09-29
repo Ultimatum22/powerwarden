@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -239,5 +240,57 @@ func TestPruneEventsOlderThan(t *testing.T) {
 	}
 	if len(events) != 1 || !events[0].At.Equal(recent) {
 		t.Fatalf("events after prune = %+v, want only the recent one", events)
+	}
+}
+
+func TestListEventsFilterAndPaging(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	base := time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC)
+	kinds := []string{"login_ok", "guest_start", "login_fail", "guest_start", "login_fail"}
+	for i, k := range kinds {
+		// Two events share a timestamp to exercise the (at, id) tiebreak.
+		at := base.Add(time.Duration(i/2) * time.Minute)
+		if err := s.RecordEvent(ctx, Event{At: at, Kind: k, Actor: "user:owner", IP: "10.0.0.1"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	page1, err := s.ListEvents(ctx, EventQuery{Limit: 2})
+	if err != nil || len(page1) != 2 {
+		t.Fatalf("page1 = %v, %v", page1, err)
+	}
+	page2, _ := s.ListEvents(ctx, EventQuery{Limit: 2, Before: &page1[1]})
+	page3, _ := s.ListEvents(ctx, EventQuery{Limit: 2, Before: &page2[1]})
+	var got []string
+	for _, p := range [][]Event{page1, page2, page3} {
+		for _, e := range p {
+			got = append(got, e.Kind)
+		}
+	}
+	if want := "login_fail guest_start login_fail guest_start login_ok"; strings.Join(got, " ") != want {
+		t.Fatalf("paged kinds = %v, want %s", got, want)
+	}
+
+	fails, _ := s.ListEvents(ctx, EventQuery{Kind: "login_fail", Limit: 10})
+	if len(fails) != 2 {
+		t.Fatalf("login_fail filter returned %d, want 2", len(fails))
+	}
+	if n, _ := s.CountEventsSince(ctx, "login_fail", base.Add(2*time.Minute)); n != 1 {
+		t.Fatalf("CountEventsSince = %d, want 1", n)
+	}
+	if ok, _ := s.HasEvent(ctx, "login_ok", "user:owner", "10.0.0.1"); !ok {
+		t.Fatal("HasEvent missed an existing login")
+	}
+	if ok, _ := s.HasEvent(ctx, "login_ok", "user:owner", "10.9.9.9"); ok {
+		t.Fatal("HasEvent matched an unseen IP")
+	}
+	kindsGot, _ := s.EventKinds(ctx)
+	if strings.Join(kindsGot, ",") != "guest_start,login_fail,login_ok" {
+		t.Fatalf("EventKinds = %v", kindsGot)
+	}
+	e, err := s.GetEvent(ctx, page1[0].ID)
+	if err != nil || e.Kind != page1[0].Kind {
+		t.Fatalf("GetEvent = %+v, %v", e, err)
 	}
 }
