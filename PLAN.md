@@ -207,13 +207,42 @@ Deliberately left out:
 
 ### Phase C: owner decisions + lightning source
 
-1. Owner answers D1–D10.
+**Done without owner input:**
+
+- **Forecast storm windows:** Open-Meteo now reports 48 h of thunder
+  hours. The timeline has a "Storm risk (forecast)" row, and the Watch
+  headline reads "Thunderstorms possible 18:00–22:00". Watch itself still
+  only uses the original lookahead.
+- **Fetch cadence fix:** the forecast and warning providers were called on
+  every 30 s tick (about 2,900 requests a day each). The configured
+  `weather.forecast.interval` was never used. Now the forecast is fetched
+  once per interval (default 30 min) and warnings every 5 min; a reused
+  answer still counts as fresh for `stale_after`.
+
+**Lightning source research (for D6).** Sources checked 2026-09-29:
+
+| Source | Access | Fit | Blocker |
+|---|---|---|---|
+| Blitzortung | none for third parties | — | no public API (ruled out in M5) |
+| KNMI "Lightning detection" (Météorage) | KNMI Data Platform | 5-min updates, NL/Europe | **not open data**: LVNL only; others must contract Météorage |
+| EUMETSAT MTG Lightning Imager, LI-2-LFL flashes | Data Store API (free account) or EUMETCast | ~90 s timeliness, ~5 km mean location offset over Europe, rare false detections; detection efficiency still preliminary | NetCDF4/HDF5 in 10 s full-disc files: parsing needs a new Go dependency (CLAUDE.md requires a justification), and polling many files is heavy for a Pi Zero |
+| Xweather Lightning API | free Developer tier, no card | JSON, strikes within a radius over the last 5 min, filtered server-side (tiny responses) | 15,000 calls/month (≈ one call every 3 min; poll faster only at Watch+). **Free-tier terms (non-commercial? attribution?) aren't on the public pages: read them at signup.** |
+| Open-Meteo `lightning_potential` (ICON-D2) | free, already used | model forecast, not observed strikes | only useful to sharpen Watch, not Warning/Danger |
+
+**Recommendation:** Xweather as the lightning network (it fits the
+existing `LightningSource` interface, the memory budget and the polling
+model), if its terms allow private 24/7 use. Adaptive polling keeps it
+under the free quota: every 10 min at Normal, every 2 min from Watch.
+MTG LI is the open fallback, but only if a NetCDF dependency is
+acceptable.
+
+**Still needs the owner:**
+
+1. Answer D1–D10. For D6: sign up for Xweather, read its terms, and put
+   the client ID/secret in a credentials file.
 2. Fill in the real `config.yaml` in LabyrinthStack `host_vars`
    (vault-encrypted secrets). This repo keeps only the example.
-3. If D6 picks a source: check its terms first, then implement it behind
-   `LightningSource` with bounding-box filtering before parsing, plus tests
-   against recorded fixtures. Never hit the real service in tests.
-4. If D3 is `router_api`: implement that vendor's client in
+3. If D3 is `router_api`: that vendor's client in
    `internal/wol/router_api.go`.
 
 ### Phase D: staged rollout on the Pi (field acceptance)

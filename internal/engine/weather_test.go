@@ -17,7 +17,7 @@ func newWeatherTestEngine(t *testing.T, wcfg weather.Config) *testEngine {
 	fc := clock.NewFake(time.Date(2026, 1, 5, 8, 0, 0, 0, loc))
 	fp := proxmox.NewFake()
 	te := newTestEngine(t, nil, nil, fc, fp, openTestStore(t), false, loc)
-	te.Weather = weather.NewMonitor(wcfg, fc.Now())
+	te.Weather = newUncachedMonitor(wcfg, fc.Now())
 	return te
 }
 
@@ -42,7 +42,7 @@ func TestWeatherLevelChangeRecordsEventAndNotifiesAboveWarning(t *testing.T) {
 	warnings := &weather.FakeWarnings{Warnings: []weather.AlertWarning{
 		{Event: "Thunderstorm", Color: "orange", Onset: now, Expires: now.Add(time.Hour)},
 	}}
-	te.Config.Weather = weather.NewMonitor(weather.Config{Forecast: forecast, Warnings: warnings, WarningRadiusKM: 30, DangerRadiusKM: 12}, now)
+	te.Config.Weather = newUncachedMonitor(weather.Config{Forecast: forecast, Warnings: warnings, WarningRadiusKM: 30, DangerRadiusKM: 12}, now)
 
 	if err := te.Tick(ctx); err != nil {
 		t.Fatalf("tick 2 (warning): %v", err)
@@ -111,7 +111,7 @@ func TestWeatherStaleDuringNormalNotifiesOncePerEpisode(t *testing.T) {
 	fc := clock.NewFake(time.Date(2026, 1, 5, 8, 0, 0, 0, loc))
 	fp := proxmox.NewFake()
 	te := newTestEngine(t, nil, nil, fc, fp, openTestStore(t), false, loc)
-	te.Weather = weather.NewMonitor(wcfg, fc.Now())
+	te.Weather = newUncachedMonitor(wcfg, fc.Now())
 	ctx := context.Background()
 
 	if err := te.Tick(ctx); err != nil {
@@ -165,7 +165,7 @@ func TestWeatherNeverBlocksGuestReconciliation(t *testing.T) {
 	// Danger-level weather (a strike right on top of the house), but
 	// milestone 5 ships notify-only: it must not stop the guest from
 	// starting on schedule.
-	te.Weather = weather.NewMonitor(weather.Config{
+	te.Weather = newUncachedMonitor(weather.Config{
 		Lightning:       &weather.FakeLightning{StrikesData: []weather.Strike{{At: fc.Now(), Point: weather.Point{}}}},
 		WarningRadiusKM: 30, DangerRadiusKM: 12,
 	}, fc.Now())
@@ -176,4 +176,12 @@ func TestWeatherNeverBlocksGuestReconciliation(t *testing.T) {
 	if g, _ := fp.Guest(201); g.Status != proxmox.StatusRunning {
 		t.Fatal("expected the guest to start on schedule despite Danger-level weather (notify-only milestone)")
 	}
+}
+
+// newUncachedMonitor builds a Monitor that fetches every source on every
+// Evaluate, so tests can change fake weather between ticks seconds apart.
+// Fetch caching itself is tested in internal/weather.
+func newUncachedMonitor(cfg weather.Config, now time.Time) *weather.Monitor {
+	cfg.ForecastInterval, cfg.WarningsInterval = -1, -1
+	return weather.NewMonitor(cfg, now)
 }

@@ -28,6 +28,11 @@ type OpenMeteo struct {
 
 const openMeteoDefaultBaseURL = "https://api.open-meteo.com"
 
+// thunderHorizonHours is how far ahead ThunderHours reaches (today and
+// tomorrow on the timeline); ThunderstormExpected still only looks
+// LookaheadHours ahead.
+const thunderHorizonHours = 48
+
 // thunderstormWeatherCodes are Open-Meteo/WMO codes 95 (thunderstorm),
 // 96 and 99 (thunderstorm with slight/heavy hail) — CLAUDE.md's explicit
 // trigger codes.
@@ -55,7 +60,7 @@ func (o OpenMeteo) Forecast(ctx context.Context) (Forecast, error) {
 		"latitude":       {strconv.FormatFloat(o.Location.Lat, 'f', -1, 64)},
 		"longitude":      {strconv.FormatFloat(o.Location.Lon, 'f', -1, 64)},
 		"hourly":         {"weathercode,cape"},
-		"forecast_hours": {strconv.Itoa(lookahead)},
+		"forecast_hours": {strconv.Itoa(max(lookahead, thunderHorizonHours))},
 		"timezone":       {"UTC"},
 	}
 	reqURL := base + "/v1/forecast?" + q.Encode()
@@ -87,10 +92,19 @@ func (o OpenMeteo) Forecast(ctx context.Context) (Forecast, error) {
 
 	var f Forecast
 	for i, code := range data.Hourly.WeatherCode {
+		inLookahead := i < lookahead
 		if thunderstormWeatherCodes[code] {
-			f.ThunderstormExpected = true
+			if inLookahead {
+				f.ThunderstormExpected = true
+			}
+			if i < len(data.Hourly.Time) {
+				// Requested with timezone=UTC; times are "2006-01-02T15:04".
+				if t, err := time.ParseInLocation("2006-01-02T15:04", data.Hourly.Time[i], time.UTC); err == nil {
+					f.ThunderHours = append(f.ThunderHours, t)
+				}
+			}
 		}
-		if i < len(data.Hourly.CAPE) && data.Hourly.CAPE[i] > f.CAPEJPerKG {
+		if inLookahead && i < len(data.Hourly.CAPE) && data.Hourly.CAPE[i] > f.CAPEJPerKG {
 			f.CAPEJPerKG = data.Hourly.CAPE[i]
 		}
 	}

@@ -263,6 +263,7 @@ details.inline-form[open] > form { margin-top: 8px; display: grid; gap: 8px; }
 .seg-schedule { fill: color-mix(in srgb, var(--accent) 55%, transparent); }
 .seg-override { fill: var(--warn); }
 .seg-alwayson { fill: color-mix(in srgb, var(--ok) 40%, transparent); }
+.seg-storm { fill: color-mix(in srgb, var(--danger) 40%, transparent); }
 .track-now { fill: var(--text); }
 .timeline-axis { margin-left: 104px; }
 .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; color: var(--muted); font-size: 0.85rem; }

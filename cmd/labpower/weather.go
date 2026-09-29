@@ -41,6 +41,7 @@ func newWeatherMonitorConfig(cfg *config.Config, logger *slog.Logger) weather.Co
 		AllClearAfter:            cfg.Weather.Levels.AllClearAfter,
 		StaleAfter:               cfg.Weather.StaleAfter,
 		LocalCorroborationWindow: cfg.Weather.LocalSensor.CorroborationWindow,
+		ForecastInterval:         cfg.Weather.Forecast.Interval,
 	}
 
 	if cfg.Weather.Forecast.Provider == "open-meteo" {

@@ -89,6 +89,10 @@ type Forecast struct {
 	// for display/future use; no fixed numeric threshold is specified by
 	// CLAUDE.md, so it isn't used to gate the level on its own.
 	CAPEJPerKG float64
+	// ThunderHours are the starts of forecast hours with a thunderstorm
+	// code, over a longer horizon than ThunderstormExpected (for the
+	// timeline's storm-risk row and "possible 18:00–22:00" headlines).
+	ThunderHours []time.Time
 }
 
 // ForecastSource reports the near-term forecast for the configured
@@ -128,6 +132,15 @@ type Config struct {
 	// must be to count as confirmed on their own (CLAUDE.md: "two local
 	// detections occur within 5 minutes"). Zero uses a 5-minute default.
 	LocalCorroborationWindow time.Duration
+
+	// ForecastInterval and WarningsInterval are how often those sources
+	// are actually fetched (config weather.forecast.interval); Evaluate
+	// runs every engine tick and reuses the last good answer in between,
+	// instead of hitting free public APIs every 30 seconds. Zero uses 30
+	// and 5 minutes; negative fetches every time (tests). A reused answer
+	// counts as fresh for staleness.
+	ForecastInterval time.Duration
+	WarningsInterval time.Duration
 }
 
 // Monitor evaluates the current threat level from whichever sources are
@@ -137,6 +150,11 @@ type Monitor struct {
 
 	mu     sync.Mutex
 	lastOK map[string]time.Time // source name -> last successful fetch
+
+	forecast   Forecast
+	forecastAt time.Time // zero: never fetched successfully
+	warnings   []AlertWarning
+	warningsAt time.Time
 }
 
 // NewMonitor builds a Monitor. now seeds a grace baseline for every
@@ -146,6 +164,12 @@ type Monitor struct {
 func NewMonitor(cfg Config, now time.Time) *Monitor {
 	if cfg.LocalCorroborationWindow <= 0 {
 		cfg.LocalCorroborationWindow = 5 * time.Minute
+	}
+	if cfg.ForecastInterval == 0 {
+		cfg.ForecastInterval = 30 * time.Minute
+	}
+	if cfg.WarningsInterval == 0 {
+		cfg.WarningsInterval = 5 * time.Minute
 	}
 	lastOK := make(map[string]time.Time)
 	for name, configured := range map[string]bool{
@@ -169,6 +193,7 @@ type Result struct {
 	NearestStrikeKM float64 // -1 if no strike source or no strikes in range
 	ActiveWarning   *AlertWarning
 	ForecastThunder bool
+	ThunderHours    []time.Time // forecast hours with thunder, see Forecast
 	LocalConfirmed  bool
 	Stale           bool
 	StaleSources    []string
@@ -216,7 +241,7 @@ func (m *Monitor) Evaluate(ctx context.Context, now time.Time) Result {
 
 	var activeWarning *AlertWarning
 	if m.cfg.Warnings != nil {
-		warnings, err := m.cfg.Warnings.ActiveWarnings(ctx)
+		warnings, err := m.warningsCached(ctx, now)
 		if err == nil {
 			m.lastOK["warnings"] = now
 			for i := range warnings {
@@ -230,11 +255,13 @@ func (m *Monitor) Evaluate(ctx context.Context, now time.Time) Result {
 	}
 
 	forecastThunder := false
+	var thunderHours []time.Time
 	if m.cfg.Forecast != nil {
-		f, err := m.cfg.Forecast.Forecast(ctx)
+		f, err := m.forecastCached(ctx, now)
 		if err == nil {
 			m.lastOK["forecast"] = now
 			forecastThunder = f.ThunderstormExpected
+			thunderHours = f.ThunderHours
 		}
 	}
 
@@ -271,10 +298,39 @@ func (m *Monitor) Evaluate(ctx context.Context, now time.Time) Result {
 		NearestStrikeKM: nearestStrikeKM,
 		ActiveWarning:   activeWarning,
 		ForecastThunder: forecastThunder,
+		ThunderHours:    thunderHours,
 		LocalConfirmed:  localConfirmed,
 		Stale:           stale,
 		StaleSources:    staleSources,
 	}
+}
+
+// forecastCached fetches the forecast at most every ForecastInterval.
+// Callers hold m.mu.
+func (m *Monitor) forecastCached(ctx context.Context, now time.Time) (Forecast, error) {
+	if m.cfg.ForecastInterval > 0 && !m.forecastAt.IsZero() && now.Sub(m.forecastAt) < m.cfg.ForecastInterval {
+		return m.forecast, nil
+	}
+	f, err := m.cfg.Forecast.Forecast(ctx)
+	if err != nil {
+		return Forecast{}, err
+	}
+	m.forecast, m.forecastAt = f, now
+	return f, nil
+}
+
+// warningsCached fetches official warnings at most every
+// WarningsInterval. Callers hold m.mu.
+func (m *Monitor) warningsCached(ctx context.Context, now time.Time) ([]AlertWarning, error) {
+	if m.cfg.WarningsInterval > 0 && !m.warningsAt.IsZero() && now.Sub(m.warningsAt) < m.cfg.WarningsInterval {
+		return m.warnings, nil
+	}
+	w, err := m.cfg.Warnings.ActiveWarnings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	m.warnings, m.warningsAt = w, now
+	return w, nil
 }
 
 // confirmLocal applies CLAUDE.md's AS3935 noise filter: a single detection
