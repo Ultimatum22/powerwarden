@@ -134,8 +134,8 @@ func (s *Server) stormTrack(hours []time.Time, from, to time.Time) trackRow {
 		}
 		start, end = maxTime(start, from), minTime(end, to)
 		row.Segments = append(row.Segments, segment{
-			X: trackUnits * float64(start.Sub(from)) / span,
-			W: trackUnits * float64(end.Sub(start)) / span,
+			X:     trackUnits * float64(start.Sub(from)) / span,
+			W:     trackUnits * float64(end.Sub(start)) / span,
 			Class: "seg-storm",
 		})
 		n++
