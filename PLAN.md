@@ -280,6 +280,20 @@ to schedule and weather.
 
 ### Phase E: LabyrinthStack changes (separate repo, separate PRs)
 
+**Prepared:** `docs/LABYRINTHSTACK.md` is ready to file as an issue there.
+It covers:
+
+- the exact Proxmox privilege and ACL path for every API call labpower
+  makes, with `pveum` reference commands;
+- tofu guest settings;
+- the Ansible role, including release-asset checksum verification and
+  removing `fake-hwclock`;
+- the Proxmox host, the firewall (with an nftables sketch), Pangolin, and
+  CI.
+
+labpower now shows token-hidden always-on guests as "Not visible to
+labpower" instead of "not found". Doing the work itself needs that repo.
+
 Tracked there, not here. Checklist from CLAUDE.md:
 
 - [ ] OpenTofu: `labpower@pve` user/role/token with per-guest ACLs (scheduled guests only); `on_boot`; `ignore_changes = [started]`

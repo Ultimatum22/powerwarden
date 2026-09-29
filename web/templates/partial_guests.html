@@ -9,6 +9,7 @@
     <div class="guest-status">
       {{if eq .Status "running"}}<span class="pill pill-running">Running</span>
       {{else if eq .Status "stopped"}}<span class="pill pill-stopped">Stopped</span>
+      {{else if eq .Status "protected"}}<span class="badge" title="Outside labpower's API token, by design">Not visible to labpower</span>
       {{else}}<span class="pill pill-warn">{{title .Status}}</span>{{end}}
     </div>
     <div class="guest-meta">
