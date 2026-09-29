@@ -86,7 +86,7 @@ GitHub Actions CI/release alongside the Forgejo workflows (see decision D8).
 
 | Area | Gap | Where |
 |---|---|---|
-| Timeline | Only a "Coming up" list. No hour axis, no 22 px tracks per host/guest, no storm-risk row, no now-line, no legend, no Today/Tomorrow/Week switch. | `web/templates/timeline.html`, `internal/web/views.go` |
+| Timeline | ✅ Phase B (storm-risk row still open) | `internal/web/timeline.go` |
 | Security page | Read-only. Missing: add/remove passkey (step-up), TOTP enrol/disable, **revoke session**, recent login attempts. No routes exist. | `web/templates/security.html`, `internal/web/routes.go` |
 | Live updates | No `hx-trigger="every 15s"` polling and no SSE. The dashboard is static until reload. | `dashboard.html`, `partial_*.html` |
 | Events | Hard-coded last 100. No filter by kind, no pagination, no dry-run marker check. | `internal/web/handlers_pages.go:122` |
@@ -159,33 +159,51 @@ hand in a real browser, since no authenticator runs in CI.
 **Done when:** from a real browser via `LIVE=1 make dev` you can enrol, log in, start and stop a guest, and shut the host down with step-up,
 with zero CSP violations in the console.
 
-### Phase B: finish the spec (code, ~3–5 sessions)
+### Phase B: finish the spec ✅ done (branch `phase-a`)
 
-In priority order for remote use:
+All eleven items are done:
 
-1. **Security page:** passkey add/remove (step-up), TOTP enrol/disable
-   (step-up), revoke session, recent login attempts. Routes are
-   `POST /security/passkeys/{id}/delete`, `POST /security/sessions/{id}/revoke`,
-   and `POST /security/totp/…`.
-2. **Alerts:** new-IP login and failed-login-burst notifications, plus tests.
-3. **Clock trust:** NTP-synced or RTC-backed, with a fake for tests. Engine
-   test: no action while untrusted.
-4. **Config validation:** warn when the host schedule misses a
-   `required_window`; reject guest windows outside the host window. Table tests
-   plus fuzz corpus entries.
-5. **Live updates:** `hx-trigger="every 15s"` on the host, weather, and guests
-   partials. SSE optional later (it needs its own `WriteTimeout`).
-6. **Timeline:** server-rendered tracks (percent widths), Today/Tomorrow/Week,
-   storm-risk row from the forecast, now-line, legend.
-7. **Host shutdown pre-checks:** ZFS scrub (via active tasks or node status),
-   last successful WoL from `state`, confirm disabled on failure.
-8. **Events:** kind filter, pagination, dry-run marker.
-9. **Weather page** and a desktop dashboard check against the spec.
-10. Vendor the fonts and add checksums.
-11. Optional: software WebAuthn authenticator for E2E tests.
+- **Security page:** add/remove passkeys, TOTP setup/disable, session
+  revoke, recent sign-ins.
+- **Alerts:** new-IP login, failed-login bursts, ignore-weather.
+- **Clock trust:** NTP marker or RTC `hctosys`; `clock.trust: system` for
+  dev.
+- **Config validation:** guest windows outside the host window are
+  rejected; `required_windows` produce warnings.
+- **Live updates:** host, weather and guest cards poll every 15 s.
+- **Timeline:** SVG tracks for Today/Tomorrow/Week, now-line, legend,
+  "Coming up".
+- **Shutdown pre-checks:** ZFS scrub and last successful WoL; confirm is
+  disabled when a check fails.
+- **Events page:** kind filter and pagination.
+- **Weather page**, plus the desktop dashboard layout.
+- **Fonts:** vendored, checksum-pinned, and verified by a test.
+- **Tests:** a software passkey drives real WebAuthn registration and
+  assertion.
 
-**Done when:** every screen in CLAUDE.md "UI specification" exists and every
-security test listed under "Testing" passes.
+Bugs found and fixed along the way:
+
+- "Wake at next schedule" never woke the host (an off override with no
+  end).
+- An ignore-weather override shadowed a vacation or manual shutdown and
+  woke the host.
+- The vacation banner showed for manual shutdowns but not for real
+  vacations.
+- Enrolment didn't require discoverable passkeys, although login is
+  usernameless.
+- Times were shown in UTC. Ignore-weather was unbounded.
+  `/schedules/pause` accepted any target.
+
+Deliberately left out:
+
+- **Storm-risk timeline row:** the forecast source only reports "thunder
+  expected yes/no", not hours. Needs Open-Meteo's hourly weather codes
+  kept in the engine.
+- **SSE:** polling covers live updates.
+- **Always-on guest "purpose" text:** not in the config.
+- **Real-browser check:** screens were checked with headless Firefox at
+  390 px and 1280 px. A real passkey ceremony still needs a manual test
+  in `make dev`.
 
 ### Phase C: owner decisions + lightning source
 

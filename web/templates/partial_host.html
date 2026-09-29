@@ -1,4 +1,27 @@
 {{define "partial_host"}}
-{{if .Reachable}}<span class="pill pill-running">Running</span>{{else}}<span class="pill pill-stopped">Stopped</span>{{end}}
-<p class="muted">Schedule <span class="mono">{{.ScheduleName}}</span></p>
+<section id="host-card" class="card" aria-labelledby="host-card-title" hx-get="/partials/host" hx-trigger="every 15s" hx-swap="outerHTML">
+  <div class="card-head">
+    <h2 id="host-card-title" class="stat-label">Proxmox host</h2>
+    {{if .Reachable}}<span class="pill pill-running">Running</span>{{else}}<span class="pill pill-stopped">Stopped</span>{{end}}
+  </div>
+  {{if .Next}}
+  <p class="big">{{if .Next.On}}Wakes{{else}}Shuts down{{end}} at <span class="mono">{{.Next.Label}}</span></p>
+  <p class="muted">In {{.Next.In}} · schedule <span class="mono">{{.ScheduleName}}</span>{{if .Windows}} · today <span class="mono">{{.Windows}}</span>{{end}}</p>
+  {{else}}
+  <p class="big">No schedule change this week</p>
+  <p class="muted">Schedule <span class="mono">{{.ScheduleName}}</span></p>
+  {{end}}
+  {{with .Override}}
+  <div class="override-strip">
+    <span>{{if eq .Action "on"}}Kept on{{else if eq .Action "off"}}Shut down manually{{else}}Schedule paused{{end}}{{if .Until}} · until <span class="mono">{{.UntilLabel}}</span>, then schedule{{end}}</span>
+    <form hx-post="/overrides/{{.ID}}/cancel" hx-target="body">
+      <button type="submit" class="btn btn-sm">Cancel</button>
+    </form>
+  </div>
+  {{end}}
+  <div class="actions">
+    <form hx-post="/host/wake" hx-target="body"><button type="submit" class="btn">{{if .Reachable}}Keep on tonight{{else}}Wake now{{end}}</button></form>
+    {{if .Reachable}}<a href="/host/shutdown" class="btn btn-danger-outline">Shut down…</a>{{end}}
+  </div>
+</section>
 {{end}}

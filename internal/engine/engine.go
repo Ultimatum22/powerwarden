@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/Ultimatum22/powerwarden/internal/clock"
@@ -96,6 +97,45 @@ type Config struct {
 type Engine struct {
 	Config
 	order []string // guest names, dependencies before dependents
+
+	weatherMu   sync.Mutex
+	lastWeather WeatherStatus
+}
+
+// WeatherStatus is the engine's latest weather evaluation, kept in memory
+// for the web UI (writing it every tick would wear the SD card).
+type WeatherStatus struct {
+	Result      weather.Result
+	EvaluatedAt time.Time // zero until the first evaluation
+	Mode        string    // "notify" | "enforce"
+	// ShutdownAt is when a Warning's countdown shuts the host down, in
+	// enforce mode; nil otherwise.
+	ShutdownAt *time.Time
+}
+
+// LastWeather returns the latest weather evaluation.
+func (e *Engine) LastWeather() WeatherStatus {
+	e.weatherMu.Lock()
+	defer e.weatherMu.Unlock()
+	return e.lastWeather
+}
+
+func (e *Engine) setLastWeather(ctx context.Context, now time.Time, r weather.Result) {
+	st := WeatherStatus{Result: r, EvaluatedAt: now, Mode: e.WeatherMode}
+	if st.Mode == "" {
+		st.Mode = "notify"
+	}
+	if st.Mode == "enforce" && r.Level == weather.Warning {
+		if v, ok, err := e.Store.GetState(ctx, weatherWarningSinceKey); err == nil && ok {
+			if since, err := time.Parse(time.RFC3339, v); err == nil {
+				at := since.Add(e.WeatherWarningCountdown)
+				st.ShutdownAt = &at
+			}
+		}
+	}
+	e.weatherMu.Lock()
+	e.lastWeather = st
+	e.weatherMu.Unlock()
 }
 
 // New builds an Engine, computing and validating the guest dependency
@@ -128,7 +168,8 @@ func (e *Engine) Tick(ctx context.Context) error {
 	}
 	now := e.Clock.Now()
 
-	weatherResult := e.reconcileWeather(ctx, now) // evaluation/notification failures are logged, not returned (see reconcileWeather)
+	weatherResult := e.reconcileWeather(ctx, now)   // evaluation/notification failures are logged, not returned (see reconcileWeather)
+	defer e.setLastWeather(ctx, now, weatherResult) // after host reconciliation, which starts any Warning countdown
 
 	lastTickStr, hasLastTick, err := e.Store.GetState(ctx, lastTickKey)
 	if err != nil {

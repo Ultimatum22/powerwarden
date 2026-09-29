@@ -1,3 +1,25 @@
 {{define "partial_weather"}}
-<span class="pill {{if eq .Level "danger"}}pill-danger{{else if eq .Level "warning"}}pill-warn{{else if eq .Level "watch"}}pill-warn{{else}}pill-running{{end}}">{{.Level}}</span>
+<section id="weather-card" class="card {{if eq .Level "warning" "watch"}}card-tinted-warn{{else if eq .Level "danger"}}card-tinted-danger{{end}}" aria-labelledby="weather-card-title" hx-get="/partials/weather" hx-trigger="every 15s" hx-swap="outerHTML">
+  <div class="card-head">
+    <h2 id="weather-card-title" class="stat-label">{{template "icon-bolt" .}} Weather</h2>
+    <span class="pill {{if eq .Level "danger"}}pill-danger{{else if eq .Level "warning" "watch"}}pill-warn{{else}}pill-running{{end}}">{{title .Level}}</span>
+  </div>
+  <p class="big">{{.Headline}}</p>
+  <div class="tiles">
+    <div class="stat-tile"><div class="stat-label">Nearest strike</div><div class="stat-value">{{.Nearest}}</div></div>
+    <div class="stat-tile"><div class="stat-label">Warnings</div><div class="stat-value">{{.Warning}}</div></div>
+    <div class="stat-tile"><div class="stat-label">Local sensor</div><div class="stat-value">{{.Local}}</div></div>
+  </div>
+  {{if .Stale}}<p class="warn-text">{{template "icon-alert" .}} Weather data is out of date.</p>{{end}}
+  {{if .Ignored}}
+  <p class="warn-text">Weather safety bypassed until <span class="mono">{{.Ignored}}</span>.</p>
+  {{else if .ShutdownAt}}
+  <p class="warn-text">Host shuts down in <span class="mono">{{.ShutdownIn}}</span> unless cancelled.</p>
+  <form hx-post="/weather/ignore" hx-target="body" data-stepup>
+    <input type="hidden" name="minutes" value="60">
+    <button type="submit" class="btn btn-sm">Cancel shutdown (1 h, passkey)</button>
+  </form>
+  {{end}}
+  <p class="muted small">{{if eq .Mode "enforce"}}Shuts the host down at Warning (after a countdown) and at Danger.{{else}}Notify-only: storms are reported, the host is never shut down for weather.{{end}}</p>
+</section>
 {{end}}

@@ -2,30 +2,33 @@ package web
 
 import (
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/Ultimatum22/powerwarden/internal/engine"
-	"github.com/Ultimatum22/powerwarden/internal/schedule"
 	"github.com/Ultimatum22/powerwarden/internal/store"
 )
 
 func (s *Server) pd(r *http.Request, active, title string) pageData {
 	sess, _ := sessionFromContext(r.Context())
-	pd := pageData{Title: title, ActiveNav: active, CSRFToken: s.csrfToken(sess)}
+	pd := pageData{Title: title, ActiveNav: active, CSRFToken: s.csrfToken(sess), Now: s.Clock.Now().In(s.Loc).Format("Mon 2 Jan 15:04")}
 	pd.Vacation = s.activeVacation(r.Context()) != nil
 	if !sess.CreatedAt.IsZero() {
 		remaining := s.Sessions.AbsoluteTimeout - s.Clock.Now().Sub(sess.CreatedAt)
 		if remaining > 0 {
-			pd.SessionEnd = remaining.Round(time.Minute).String()
+			pd.SessionEnd = humanDuration(remaining)
 		}
 	}
 	return pd
 }
 
 type dashboardData struct {
-	Host    hostView
-	Weather weatherView
-	Guests  []guestView
+	Host     hostView
+	Weather  weatherView
+	Guests   []guestView
+	Upcoming []timelineEntry
+	Recent   []eventView
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -34,52 +37,20 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	data := dashboardData{Host: s.hostView(r.Context()), Weather: s.weatherView(r.Context()), Guests: guests}
+	if data.Upcoming, err = s.upcoming(r.Context(), s.Clock.Now(), 24*time.Hour, 5); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	recent, err := s.Store.ListEvents(r.Context(), store.EventQuery{Limit: 5})
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	data.Recent = s.eventViews(recent)
 	pd := s.pd(r, "dashboard", "Dashboard")
-	pd.Data = dashboardData{Host: s.hostView(r.Context()), Weather: s.weatherView(r.Context()), Guests: guests}
+	pd.Data = data
 	s.render(w, "dashboard", pd)
-}
-
-type timelineEntry struct {
-	Time string
-	Text string
-}
-
-type timelineData struct {
-	Day     string
-	Entries []timelineEntry
-}
-
-// handleTimeline shows the schedule's upcoming boundary crossings for
-// today. CLAUDE.md's spec describes a full percent-width track
-// visualization across Today/Tomorrow/Week; this ships the "Coming up"
-// list (the same underlying schedule.Crossings data), which is the part
-// an owner actually acts on — the graphical track is a reasonable
-// follow-up, not a security- or correctness-relevant gap.
-func (s *Server) handleTimeline(w http.ResponseWriter, r *http.Request) {
-	now := s.Clock.Now().In(s.Loc)
-	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.Loc)
-	dayEnd := dayStart.AddDate(0, 0, 1)
-
-	var entries []timelineEntry
-	addCrossings := func(name string, sched schedule.Schedule) {
-		for _, b := range sched.Crossings(dayStart.Add(-time.Nanosecond), dayEnd, s.Loc) {
-			word := "off"
-			if b.On {
-				word = "on"
-			}
-			entries = append(entries, timelineEntry{Time: b.At.In(s.Loc).Format("15:04"), Text: name + " turns " + word})
-		}
-	}
-	addCrossings("host", s.Schedules[s.Host.Schedule])
-	for _, g := range s.Guests {
-		if !g.AlwaysOn {
-			addCrossings(g.Name, s.Schedules[g.Schedule])
-		}
-	}
-
-	pd := s.pd(r, "timeline", "Timeline")
-	pd.Data = timelineData{Day: dayStart.Format("Monday, Jan 2"), Entries: entries}
-	s.render(w, "timeline", pd)
 }
 
 type hostShutdownData struct {
@@ -142,15 +113,58 @@ func (s *Server) handleVacationPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "vacation", pd)
 }
 
+const eventsPageSize = 50
+
+type eventsData struct {
+	Events   []eventView
+	Kinds    []string
+	Kind     string
+	Newer    bool   // not on the first page
+	OlderURL string // next page, or ""
+}
+
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
-	events, err := s.Store.ListRecentEvents(r.Context(), 100)
+	q := store.EventQuery{Kind: r.URL.Query().Get("kind"), Limit: eventsPageSize}
+	data := eventsData{Kind: q.Kind}
+	if v := r.URL.Query().Get("before"); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		before, err := s.Store.GetEvent(r.Context(), id)
+		if err != nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		q.Before, data.Newer = &before, true
+	}
+	events, err := s.Store.ListEvents(r.Context(), q)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	if data.Kinds, err = s.Store.EventKinds(r.Context()); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	data.Events = s.eventViews(events)
+	if len(events) == eventsPageSize {
+		v := url.Values{"before": {strconv.FormatInt(events[len(events)-1].ID, 10)}}
+		if q.Kind != "" {
+			v.Set("kind", q.Kind)
+		}
+		data.OlderURL = "/events?" + v.Encode()
+	}
 	pd := s.pd(r, "events", "Events")
-	pd.Data = events
+	pd.Data = data
 	s.render(w, "events", pd)
+}
+
+func (s *Server) handleWeatherPage(w http.ResponseWriter, r *http.Request) {
+	pd := s.pd(r, "weather", "Weather")
+	pd.Data = struct{ Weather weatherView }{s.weatherView(r.Context())}
+	s.render(w, "weather", pd)
 }
 
 type securityData struct {
@@ -195,11 +209,16 @@ func (s *Server) handleSecurityPage(w http.ResponseWriter, r *http.Request) {
 
 	data := securityData{HasTOTP: len(u.TOTPSecretEnc) > 0}
 	for _, c := range creds {
-		data.Credentials = append(data.Credentials, credentialView{IDHex: hexID(c.ID), CreatedAt: c.CreatedAt, LastUsed: c.LastUsed})
+		cv := credentialView{IDHex: hexID(c.ID), CreatedAt: c.CreatedAt.In(s.Loc)}
+		if c.LastUsed != nil {
+			t := c.LastUsed.In(s.Loc)
+			cv.LastUsed = &t
+		}
+		data.Credentials = append(data.Credentials, cv)
 	}
 	for _, sv := range sessions {
 		data.Sessions = append(data.Sessions, sessionView{
-			IDHex: hexID(sv.TokenHash), CreatedAt: sv.CreatedAt, LastSeen: sv.LastSeen,
+			IDHex: hexID(sv.TokenHash), CreatedAt: sv.CreatedAt.In(s.Loc), LastSeen: sv.LastSeen.In(s.Loc),
 			IP: sv.IP, UserAgent: sv.UserAgent, Current: string(sv.TokenHash) == string(sess.TokenHash),
 		})
 	}
@@ -207,6 +226,9 @@ func (s *Server) handleSecurityPage(w http.ResponseWriter, r *http.Request) {
 	if data.Attempts, err = s.recentLoginAttempts(r, 10); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
+	}
+	for i := range data.Attempts {
+		data.Attempts[i].At = data.Attempts[i].At.In(s.Loc)
 	}
 
 	pd := s.pd(r, "security", "Security")

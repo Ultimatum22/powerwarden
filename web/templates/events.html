@@ -1,21 +1,20 @@
 {{define "content"}}
-<header><h1>Events</h1></header>
-<div class="card card-flush">
-  <table>
-    <thead><tr><th>Time</th><th>Kind</th><th>Target</th><th>Actor</th><th>Dry-run</th></tr></thead>
-    <tbody>
-    {{range .Data}}
-      <tr>
-        <td class="mono">{{.At.Format "2006-01-02 15:04:05"}}</td>
-        <td>{{.Kind}}</td>
-        <td>{{.Target}}</td>
-        <td>{{.Actor}}</td>
-        <td>{{if .DryRun}}yes{{else}}—{{end}}</td>
-      </tr>
-    {{else}}
-      <tr><td colspan="5" class="muted">No events yet.</td></tr>
-    {{end}}
-    </tbody>
-  </table>
-</div>
+<header class="page-head"><h1>Events</h1></header>
+<form class="filter" method="get" action="/events">
+  <label for="kind">Show</label>
+  <select id="kind" name="kind">
+    <option value="">All events</option>
+    {{range .Data.Kinds}}<option value="{{.}}" {{if eq . $.Data.Kind}}selected{{end}}>{{.}}</option>{{end}}
+  </select>
+  <button type="submit" class="btn btn-sm">Filter</button>
+</form>
+<section class="card">
+  <ul class="event-list">
+    {{range .Data.Events}}{{template "event-item" .}}{{else}}<li class="muted">No events.</li>{{end}}
+  </ul>
+</section>
+<nav class="actions" aria-label="Pages">
+  {{if .Data.Newer}}<a class="btn btn-sm" href="/events{{if .Data.Kind}}?kind={{.Data.Kind}}{{end}}">Newest</a>{{end}}
+  {{if .Data.OlderURL}}<a class="btn btn-sm" href="{{.Data.OlderURL}}">Older</a>{{end}}
+</nav>
 {{end}}

@@ -1,13 +1,54 @@
 {{define "partial_guests"}}
-{{range .}}
-<div class="card guest-card">
-  <div>
-    <span class="guest-name">{{.Name}}</span>
-    <span class="badge">{{.Kind}}</span>
-    {{if eq .Status "running"}}<span class="pill pill-running">Running</span>
-    {{else if eq .Status "stopped"}}<span class="pill pill-stopped">Stopped</span>
-    {{else}}<span class="pill pill-warn">{{.Status}}</span>{{end}}
-  </div>
+<div id="guest-list" class="guest-list" hx-get="/partials/guests" hx-trigger="every 15s" hx-swap="outerHTML">
+  {{range .}}
+  <article class="card guest-row">
+    <div class="guest-id">
+      <span class="guest-name">{{.Name}}</span>
+      {{if .Kind}}<span class="badge">{{.Kind}}</span>{{end}}
+    </div>
+    <div class="guest-status">
+      {{if eq .Status "running"}}<span class="pill pill-running">Running</span>
+      {{else if eq .Status "stopped"}}<span class="pill pill-stopped">Stopped</span>
+      {{else}}<span class="pill pill-warn">{{title .Status}}</span>{{end}}
+    </div>
+    <div class="guest-meta">
+      {{if .AlwaysOn}}{{template "icon-lock" .}} Always on · protected
+      {{else}}Schedule <span class="mono">{{.ScheduleName}}</span>{{if .Windows}} · <span class="mono">{{.Windows}}</span>{{end}}{{end}}
+    </div>
+    {{with .Override}}
+    <div class="override-strip">
+      <span>{{if eq .Action "on"}}Manual start{{else if eq .Action "off"}}Manual stop{{else}}Paused{{end}}{{if .Until}} · until <span class="mono">{{.UntilLabel}}</span>, then schedule{{end}}</span>
+      <form hx-post="/overrides/{{.ID}}/cancel" hx-target="body"><button type="submit" class="btn btn-sm">Cancel</button></form>
+    </div>
+    {{end}}
+    {{if not .AlwaysOn}}
+    <div class="actions guest-actions">
+      {{if eq .Status "running"}}
+      <form hx-post="/guests/{{.Name}}/stop" hx-target="body"><button type="submit" class="btn btn-sm">Stop</button></form>
+      <details class="inline-form">
+        <summary class="btn btn-sm">Extend…</summary>
+        <form hx-post="/guests/{{.Name}}/start" hx-target="body">
+          <label for="until-{{.Name}}">Keep on until</label>
+          <input type="datetime-local" id="until-{{.Name}}" name="until" required hx-preserve>
+          <button type="submit" class="btn btn-sm">Keep on</button>
+        </form>
+      </details>
+      {{else}}
+      <form hx-post="/guests/{{.Name}}/start" hx-target="body"><input type="hidden" name="duration" value="2h"><button type="submit" class="btn btn-sm">Start for 2h</button></form>
+      <details class="inline-form">
+        <summary class="btn btn-sm">Start until…</summary>
+        <form hx-post="/guests/{{.Name}}/start" hx-target="body">
+          <label for="until-{{.Name}}">Run until</label>
+          <input type="datetime-local" id="until-{{.Name}}" name="until" required hx-preserve>
+          <button type="submit" class="btn btn-sm">Start</button>
+        </form>
+      </details>
+      {{end}}
+    </div>
+    {{end}}
+  </article>
+  {{else}}
+  <p class="muted">No guests configured.</p>
+  {{end}}
 </div>
-{{end}}
 {{end}}

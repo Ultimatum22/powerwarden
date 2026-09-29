@@ -92,6 +92,33 @@ func (s *Store) EffectiveOverrideOf(ctx context.Context, target string, t time.T
 	return nil, nil
 }
 
+// OverridesOverlapping returns target's overrides that were in effect at
+// some point in [from, to), newest first (the order EffectiveOverride
+// resolves conflicts in), so callers can evaluate many instants without a
+// query each.
+func (s *Store) OverridesOverlapping(ctx context.Context, target string, from, to time.Time) ([]Override, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, target, action, until, created_by, created_at, cancelled_at
+		FROM overrides
+		WHERE target = ? AND created_at < ?
+		  AND (until IS NULL OR until > ?)
+		  AND (cancelled_at IS NULL OR cancelled_at > ?)
+		ORDER BY created_at DESC, id DESC`, target, to.Unix(), from.Unix(), from.Unix())
+	if err != nil {
+		return nil, fmt.Errorf("store: overrides for %q: %w", target, err)
+	}
+	defer rows.Close()
+	var out []Override
+	for rows.Next() {
+		o, err := scanOverride(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
 func scanOverride(rows *sql.Rows) (Override, error) {
 	var o Override
 	var until, cancelledAt sql.NullInt64

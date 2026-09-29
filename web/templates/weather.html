@@ -1,0 +1,29 @@
+{{define "content"}}
+<header class="page-head"><h1>Weather</h1></header>
+{{template "partial_weather" .Data.Weather}}
+<section class="card">
+  <h2>How storm protection works</h2>
+  <dl class="facts">
+    <dt>Mode</dt><dd>{{if eq .Data.Weather.Mode "enforce"}}Enforce: shuts the host down for storms{{else}}Notify only: reports storms, never shuts down{{end}}</dd>
+    <dt>Last check</dt><dd class="mono">{{if .Data.Weather.EvaluatedAt}}{{.Data.Weather.EvaluatedAt.Format "15:04:05"}}{{else}}not yet{{end}}</dd>
+    <dt>Watch</dt><dd>Thunderstorm forecast: notification only.</dd>
+    <dt>Warning</dt><dd>Official orange/red warning or nearby strikes: notification, then shutdown after a countdown (enforce mode).</dd>
+    <dt>Danger</dt><dd>Close strikes or confirmed local detection: immediate clean shutdown (enforce mode).</dd>
+  </dl>
+</section>
+{{if not .Data.Weather.Ignored}}
+<section class="card">
+  <h2>Ignore weather</h2>
+  <p class="muted">Keeps the host up despite the storm safeguard. Needs a passkey confirmation; you'll be notified.</p>
+  <form hx-post="/weather/ignore" hx-target="body" data-stepup class="filter">
+    <label for="minutes">For</label>
+    <select id="minutes" name="minutes">
+      <option value="30">30 minutes</option>
+      <option value="60" selected>1 hour</option>
+      <option value="180">3 hours</option>
+    </select>
+    <button type="submit" class="btn btn-sm btn-danger-outline">Ignore weather</button>
+  </form>
+</section>
+{{end}}
+{{end}}

@@ -47,13 +47,12 @@
 <section class="card">
   <h2>Active sessions</h2>
   <table>
-    <thead><tr><th>Last seen</th><th>IP</th><th>Device</th><th></th></tr></thead>
+    <thead><tr><th>Last seen</th><th>From</th><th></th></tr></thead>
     <tbody>
     {{range .Data.Sessions}}
       <tr>
-        <td class="mono">{{.LastSeen.Format "2006-01-02 15:04"}}</td>
-        <td class="mono">{{.IP}}</td>
-        <td class="muted">{{.UserAgent}}</td>
+        <td class="mono">{{.LastSeen.Format "2 Jan 15:04"}}</td>
+        <td><span class="mono">{{.IP}}</span><div class="muted small break">{{.UserAgent}}</div></td>
         <td>
           <form hx-post="/security/sessions/{{.IDHex}}/revoke" hx-target="body">
             <button type="submit" class="btn btn-sm">{{if .Current}}Sign out{{else}}Revoke{{end}}</button>
@@ -71,7 +70,7 @@
     <tbody>
     {{range .Data.Attempts}}
       <tr>
-        <td class="mono">{{.At.Format "2006-01-02 15:04"}}</td>
+        <td class="mono">{{.At.Format "2 Jan 15:04"}}</td>
         <td>{{if eq .Kind "login_ok"}}<span class="pill pill-running">OK</span>{{else}}<span class="pill pill-danger">Failed</span>{{end}}</td>
         <td class="mono">{{.IP}}</td>
       </tr>

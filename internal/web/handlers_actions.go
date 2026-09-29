@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -36,16 +37,16 @@ func (s *Server) actor(r *http.Request) string {
 func (s *Server) parseUntil(r *http.Request, guestName string) (*time.Time, error) {
 	now := s.Clock.Now()
 	if v := r.PostForm.Get("until"); v != "" {
-		t, err := s.parseDateTime(v)
-		if err != nil {
-			return nil, fmt.Errorf("invalid until: %w", err)
+		t, ok := s.futureTime(v)
+		if !ok {
+			return nil, errors.New("choose a time in the future")
 		}
 		return &t, nil
 	}
 	if v := r.PostForm.Get("duration"); v != "" {
 		d, err := time.ParseDuration(v)
-		if err != nil {
-			return nil, fmt.Errorf("invalid duration: %w", err)
+		if err != nil || d < time.Minute || d > 7*24*time.Hour {
+			return nil, errors.New("invalid duration")
 		}
 		t := now.Add(d)
 		return &t, nil
@@ -311,15 +312,18 @@ func (s *Server) handleSchedulesPause(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target := r.PostForm.Get("target")
-	if target == "" {
-		http.Error(w, "target is required", http.StatusBadRequest)
+	if target != "all" && target != "host" && !s.knownGuest(target) {
+		http.Error(w, "unknown target", http.StatusBadRequest)
 		return
 	}
 	var until *time.Time
 	if v := r.PostForm.Get("until"); v != "" {
-		if t, err := s.parseDateTime(v); err == nil {
-			until = &t
+		t, ok := s.futureTime(v)
+		if !ok {
+			http.Error(w, "choose an end time in the future", http.StatusBadRequest)
+			return
 		}
+		until = &t
 	}
 
 	targets := []string{target}

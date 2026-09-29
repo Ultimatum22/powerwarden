@@ -1,0 +1,8 @@
+{{/* Small shared pieces used by several pages. */}}
+{{define "event-item"}}
+<li class="event">
+  <span class="mono event-time">{{.When}}</span>
+  <span class="event-text">{{.Text}}{{if .DryRun}} <span class="badge">dry-run</span>{{end}}</span>
+  <span class="muted event-actor">{{.Actor}}{{if .IP}} · <span class="mono">{{.IP}}</span>{{end}}</span>
+</li>
+{{end}}
