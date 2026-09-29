@@ -97,6 +97,7 @@ Simulate things that happen outside labpower:
 ```
 curl -X POST 127.0.0.1:8007/control/guests/vm-media/start   # start from the Proxmox UI
 curl -X POST '127.0.0.1:8007/control/backup?for=5m'         # active task, postpones shutdown
+curl -X POST '127.0.0.1:8007/control/scrub?for=10m'         # ZFS scrub, fails the shutdown pre-check
 curl -X POST 127.0.0.1:8007/control/host/off                # power cut
 curl -X POST 127.0.0.1:8007/control/host/on                 # power button
 ```

@@ -95,4 +95,9 @@ type Client interface {
 	// ShutdownHost requests a clean node shutdown
 	// (POST /nodes/{node}/status, command=shutdown) and returns the task ID.
 	ShutdownHost(ctx context.Context) (UPID, error)
+
+	// ZFSScrubsInProgress lists pools with a scrub running
+	// (GET /nodes/{node}/disks/zfs, then .../zfs/{pool} per pool). Scrubs
+	// run from cron, not as Proxmox tasks, so ActiveTasks misses them.
+	ZFSScrubsInProgress(ctx context.Context) ([]string, error)
 }

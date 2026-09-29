@@ -55,6 +55,16 @@ func (s *Server) routes() {
 	mux.HandleFunc("POST /vacation", s.requireSession(unauthorized, s.requireCSRF(s.requireStepUp(s.handleVacationStart))))
 	mux.HandleFunc("POST /vacation/end", s.requireSession(unauthorized, s.requireCSRF(s.requireStepUp(s.handleVacationEnd))))
 	mux.HandleFunc("POST /weather/ignore", s.requireSession(unauthorized, s.requireCSRF(s.requireStepUp(s.handleWeatherIgnore))))
+
+	// Security settings (CLAUDE.md: step-up for "security settings").
+	mux.HandleFunc("POST /security/passkeys/begin", s.requireSession(unauthorized, s.requireCSRF(s.requireStepUp(s.handlePasskeyAddBegin))))
+	mux.HandleFunc("POST /security/passkeys/finish", s.requireSession(unauthorized, s.requireCSRF(s.requireStepUp(s.handlePasskeyAddFinish))))
+	mux.HandleFunc("POST /security/passkeys/{id}/delete", s.requireSession(unauthorized, s.requireCSRF(s.requireStepUp(s.handlePasskeyDelete))))
+	mux.HandleFunc("POST /security/totp/setup", s.requireSession(unauthorized, s.requireCSRF(s.requireStepUp(s.handleTOTPSetup))))
+	mux.HandleFunc("POST /security/totp/confirm", s.requireSession(unauthorized, s.requireCSRF(s.requireStepUp(s.handleTOTPConfirm))))
+	mux.HandleFunc("POST /security/totp/disable", s.requireSession(unauthorized, s.requireCSRF(s.requireStepUp(s.handleTOTPDisable))))
+	// Revoking only reduces access, so no step-up; it should be quick.
+	mux.HandleFunc("POST /security/sessions/{id}/revoke", s.requireSession(unauthorized, s.requireCSRF(s.handleSessionRevoke)))
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {

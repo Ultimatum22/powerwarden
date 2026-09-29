@@ -1,43 +1,82 @@
 {{define "content"}}
 <header><h1>Security</h1></header>
+<p class="muted">Changes here need a fresh passkey confirmation and send a notification.</p>
 
 <section class="card">
-  <h2>Passkeys</h2>
+  <div class="section-head">
+    <h2>Passkeys</h2>
+    <button type="button" class="btn btn-sm" data-add-passkey>Add passkey</button>
+  </div>
   {{range .Data.Credentials}}
   <div class="guest-card">
     <div>
-      <span class="mono">{{.IDHex}}</span>
+      <span class="mono">{{slice .IDHex 0 12}}…</span>
       <div class="guest-meta">Added {{.CreatedAt.Format "2006-01-02"}}{{if .LastUsed}} · last used {{.LastUsed.Format "2006-01-02 15:04"}}{{else}} · never used{{end}}</div>
     </div>
+    {{if gt (len $.Data.Credentials) 1}}
+    <form hx-post="/security/passkeys/{{.IDHex}}/delete" hx-target="body" data-stepup>
+      <button type="submit" class="btn btn-sm btn-danger-outline">Remove</button>
+    </form>
+    {{end}}
   </div>
   {{else}}
   <p class="muted">No passkeys registered.</p>
   {{end}}
+  {{if eq (len .Data.Credentials) 1}}<p class="muted">Add a second passkey (e.g. on another device) before you can remove this one.</p>{{end}}
 </section>
 
 <section class="card">
-  <h2>Authenticator app (TOTP)</h2>
-  {{if .Data.HasTOTP}}
-  <p><span class="pill pill-running">Configured</span></p>
-  {{else}}
-  <p><span class="pill pill-stopped">Not configured</span></p>
-  {{end}}
+  <div class="section-head">
+    <h2>Authenticator app</h2>
+    {{if .Data.HasTOTP}}<span class="pill pill-running">On</span>{{else}}<span class="pill pill-stopped">Off</span>{{end}}
+  </div>
+  <p class="muted">A backup sign-in when no passkey is at hand.</p>
+  <div id="totp-setup">
+    {{if .Data.HasTOTP}}
+    <form hx-post="/security/totp/disable" hx-target="body" data-stepup>
+      <button type="submit" class="btn btn-sm btn-danger-outline">Turn off</button>
+    </form>
+    {{else}}
+    <form hx-post="/security/totp/setup" hx-target="#totp-setup" data-stepup>
+      <button type="submit" class="btn btn-sm">Set up</button>
+    </form>
+    {{end}}
+  </div>
 </section>
 
 <section class="card">
   <h2>Active sessions</h2>
   <table>
-    <thead><tr><th>Started</th><th>Last seen</th><th>IP</th><th></th></tr></thead>
+    <thead><tr><th>Last seen</th><th>IP</th><th>Device</th><th></th></tr></thead>
     <tbody>
     {{range .Data.Sessions}}
       <tr>
-        <td class="mono">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
         <td class="mono">{{.LastSeen.Format "2006-01-02 15:04"}}</td>
         <td class="mono">{{.IP}}</td>
+        <td class="muted">{{.UserAgent}}</td>
         <td>
-          {{if .Current}}<span class="badge">this session</span>{{end}}
+          <form hx-post="/security/sessions/{{.IDHex}}/revoke" hx-target="body">
+            <button type="submit" class="btn btn-sm">{{if .Current}}Sign out{{else}}Revoke{{end}}</button>
+          </form>
         </td>
       </tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Recent sign-in attempts</h2>
+  <table>
+    <tbody>
+    {{range .Data.Attempts}}
+      <tr>
+        <td class="mono">{{.At.Format "2006-01-02 15:04"}}</td>
+        <td>{{if eq .Kind "login_ok"}}<span class="pill pill-running">OK</span>{{else}}<span class="pill pill-danger">Failed</span>{{end}}</td>
+        <td class="mono">{{.IP}}</td>
+      </tr>
+    {{else}}
+      <tr><td class="muted">No sign-in attempts yet.</td></tr>
     {{end}}
     </tbody>
   </table>

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Ultimatum22/powerwarden/internal/notify"
 	"github.com/Ultimatum22/powerwarden/internal/proxmox"
+	"github.com/Ultimatum22/powerwarden/internal/store"
 	"github.com/Ultimatum22/powerwarden/internal/weather"
 )
 
@@ -17,6 +18,9 @@ const (
 	hostWakeAttemptsKey = "host_wake_attempts"
 	hostWakeLastSentKey = "host_wake_last_sent_at"
 	hostWakeFailedKey   = "host_wake_failed"
+	// HostLastWakeOKKey records when a Wake-on-LAN episode last ended
+	// with the host reachable (RFC 3339), shown as a shutdown pre-check.
+	HostLastWakeOKKey = "host_last_wake_ok_at"
 
 	hostShutdownPostponedNotifiedKey = "host_shutdown_postponed_notified"
 
@@ -77,6 +81,9 @@ func (e *Engine) reconcileHost(ctx context.Context, now time.Time, reachable, an
 	}
 
 	if reachable {
+		if err := e.completeWake(ctx, now); err != nil {
+			return false, err
+		}
 		if err := e.clearWakeState(ctx); err != nil {
 			return false, err
 		}
@@ -100,11 +107,11 @@ func (e *Engine) weatherSafety(ctx context.Context, now time.Time, result weathe
 		return false, false, nil
 	}
 
-	ov, err := e.Store.EffectiveOverride(ctx, hostTarget, now)
+	ov, err := e.Store.EffectiveOverrideOf(ctx, hostTarget, now, "ignore_weather")
 	if err != nil {
-		return false, false, fmt.Errorf("engine: effective host override: %w", err)
+		return false, false, fmt.Errorf("engine: ignore_weather override: %w", err)
 	}
-	if ov != nil && ov.Action == "ignore_weather" {
+	if ov != nil {
 		return false, false, nil
 	}
 
@@ -154,7 +161,7 @@ func (e *Engine) stateSince(ctx context.Context, key string, now time.Time) (tim
 // hostDesiredState applies "manual override beats schedule" to the host,
 // the same priority rule guests follow.
 func (e *Engine) hostDesiredState(ctx context.Context, now time.Time, baseDesired bool) (desired, act bool, err error) {
-	ov, err := e.Store.EffectiveOverride(ctx, hostTarget, now)
+	ov, err := e.Store.EffectiveOverrideOf(ctx, hostTarget, now, store.PowerActions...)
 	if err != nil {
 		return false, false, fmt.Errorf("engine: effective host override: %w", err)
 	}
@@ -246,6 +253,21 @@ func (e *Engine) sendWoL(ctx context.Context) error {
 		return nil
 	}
 	return e.WoLSender.Send(ctx, e.WoLMAC)
+}
+
+// completeWake records a Wake-on-LAN episode that ended with the host
+// reachable (CLAUDE.md: notify on every wake), if one was in progress.
+func (e *Engine) completeWake(ctx context.Context, now time.Time) error {
+	_, waking, err := e.Store.GetState(ctx, hostWakeLastSentKey)
+	if err != nil || !waking {
+		return err
+	}
+	if err := e.Store.SetState(ctx, HostLastWakeOKKey, now.Format(time.RFC3339)); err != nil {
+		return err
+	}
+	e.Logger.Info("engine: host is up after Wake-on-LAN")
+	e.notifyBestEffort(ctx, notify.Notification{Title: "labpower", Body: "The Proxmox host is up"})
+	return e.recordEvent(ctx, "host_wake_ok", hostTarget, "schedule", false)
 }
 
 func (e *Engine) clearWakeState(ctx context.Context) error {

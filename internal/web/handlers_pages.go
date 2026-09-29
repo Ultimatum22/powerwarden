@@ -4,15 +4,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Ultimatum22/powerwarden/internal/engine"
 	"github.com/Ultimatum22/powerwarden/internal/schedule"
+	"github.com/Ultimatum22/powerwarden/internal/store"
 )
 
 func (s *Server) pd(r *http.Request, active, title string) pageData {
 	sess, _ := sessionFromContext(r.Context())
 	pd := pageData{Title: title, ActiveNav: active, CSRFToken: s.csrfToken(sess)}
-	if ov, err := s.Store.EffectiveOverride(r.Context(), "host", s.Clock.Now()); err == nil && ov != nil && ov.Action == "off" && ov.Until == nil {
-		pd.Vacation = true
-	}
+	pd.Vacation = s.activeVacation(r.Context()) != nil
 	if !sess.CreatedAt.IsZero() {
 		remaining := s.Sessions.AbsoluteTimeout - s.Clock.Now().Sub(sess.CreatedAt)
 		if remaining > 0 {
@@ -88,6 +88,18 @@ type hostShutdownData struct {
 	ActiveTasks   int
 	TasksErr      error
 	AlwaysOnNames []string
+	NextOn        *time.Time // when "wake at next schedule" wakes the host
+	Scrubbing     []string   // ZFS pools with a scrub running
+	ScrubErr      error
+	LastWakeOK    *time.Time // last Wake-on-LAN that brought the host up
+}
+
+// ChecksPass reports whether every pre-check passed; the confirm button
+// is disabled otherwise (CLAUDE.md: "if a check fails, show it and
+// disable confirm"). Active tasks don't block: the engine postpones the
+// shutdown until they finish, as the page says.
+func (d hostShutdownData) ChecksPass() bool {
+	return d.TasksErr == nil && d.ScrubErr == nil && len(d.Scrubbing) == 0
 }
 
 func (s *Server) handleHostShutdownPage(w http.ResponseWriter, r *http.Request) {
@@ -97,10 +109,21 @@ func (s *Server) handleHostShutdownPage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	data := hostShutdownData{Host: s.hostView(r.Context()), Guests: guests}
+	if t := s.nextHostOn(s.Clock.Now()); t != nil {
+		local := t.In(s.Loc)
+		data.NextOn = &local
+	}
 	if tasks, err := s.Proxmox.ActiveTasks(r.Context()); err != nil {
 		data.TasksErr = err
 	} else {
 		data.ActiveTasks = len(tasks)
+	}
+	data.Scrubbing, data.ScrubErr = s.Proxmox.ZFSScrubsInProgress(r.Context())
+	if v, ok, _ := s.Store.GetState(r.Context(), engine.HostLastWakeOKKey); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			local := t.In(s.Loc)
+			data.LastWakeOK = &local
+		}
 	}
 	for _, g := range guests {
 		if g.AlwaysOn {
@@ -134,6 +157,7 @@ type securityData struct {
 	Credentials []credentialView
 	Sessions    []sessionView
 	HasTOTP     bool
+	Attempts    []store.Event
 }
 
 type credentialView struct {
@@ -178,6 +202,11 @@ func (s *Server) handleSecurityPage(w http.ResponseWriter, r *http.Request) {
 			IDHex: hexID(sv.TokenHash), CreatedAt: sv.CreatedAt, LastSeen: sv.LastSeen,
 			IP: sv.IP, UserAgent: sv.UserAgent, Current: string(sv.TokenHash) == string(sess.TokenHash),
 		})
+	}
+
+	if data.Attempts, err = s.recentLoginAttempts(r, 10); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
 	}
 
 	pd := s.pd(r, "security", "Security")

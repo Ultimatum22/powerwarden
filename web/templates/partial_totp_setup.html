@@ -1,0 +1,16 @@
+{{define "partial_totp_setup"}}
+<div class="totp-setup">
+  <p>Scan this code with your authenticator app, then enter the 6-digit code it shows.</p>
+  <img class="qr" src="{{.QR}}" width="200" height="200" alt="QR code for your authenticator app">
+  <p class="muted">Can't scan? Enter this key: <span class="mono break">{{.Secret}}</span></p>
+  {{if .Error}}<p class="error-text" role="alert">{{.Error}}</p>{{end}}
+  <form hx-post="/security/totp/confirm" hx-target="#totp-setup" data-stepup>
+    <input type="hidden" name="secret" value="{{.Secret}}">
+    <label for="totp-code">Code from the app</label>
+    <input type="text" id="totp-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+    <div class="actions">
+      <button type="submit" class="btn btn-primary">Turn on</button>
+    </div>
+  </form>
+</div>
+{{end}}

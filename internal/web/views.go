@@ -66,7 +66,7 @@ func (s *Server) hostView(ctx context.Context) hostView {
 		hv.Reachable = true
 		hv.Uptime = status.Uptime
 	}
-	if ov, err := s.Store.EffectiveOverride(ctx, "host", s.Clock.Now()); err == nil {
+	if ov, err := s.Store.EffectiveOverrideOf(ctx, "host", s.Clock.Now(), store.PowerActions...); err == nil {
 		hv.Override = ov
 	}
 	return hv

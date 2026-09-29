@@ -22,6 +22,9 @@ type Fake struct {
 	// NodeStatusErr, if set, is returned by NodeStatus instead of a
 	// result, to simulate the host being off/unreachable.
 	NodeStatusErr error
+
+	// Scrubbing lists pools reported by ZFSScrubsInProgress.
+	Scrubbing []string
 }
 
 // NewFake builds an empty Fake. Use AddGuest to populate it.
@@ -141,3 +144,12 @@ func (f *Fake) completedTask() UPID {
 }
 
 var _ Client = (*Fake)(nil)
+
+func (f *Fake) ZFSScrubsInProgress(_ context.Context) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.NodeReachable {
+		return nil, fmt.Errorf("proxmox fake: node unreachable")
+	}
+	return append([]string(nil), f.Scrubbing...), nil
+}

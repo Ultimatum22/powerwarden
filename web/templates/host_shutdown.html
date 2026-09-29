@@ -6,7 +6,7 @@
 <div class="card {{if .Data.AlwaysOnNames}}card-tinted-danger{{end}}">
   <h2>What goes down</h2>
   {{if .Data.AlwaysOnNames}}
-  <p class="error-text">Always-on guests will also be taken down: {{range .Data.AlwaysOnNames}}<span class="mono">{{.}}</span> {{end}}</p>
+  <p class="error-text">{{template "icon-alert" .}} Always-on guests will also be taken down: {{range .Data.AlwaysOnNames}}<span class="mono">{{.}}</span> {{end}}</p>
   {{end}}
   <table>
     <tbody>
@@ -19,24 +19,40 @@
 
 <div class="card">
   <h2>Pre-checks</h2>
-  {{if .Data.TasksErr}}
-    <p class="error-text">Could not check active tasks: node unreachable.</p>
-  {{else if gt .Data.ActiveTasks 0}}
-    <p class="error-text">{{.Data.ActiveTasks}} task(s) still active on the node — shutdown will be postponed until they finish.</p>
-  {{else}}
-    <p>{{template "icon-check" .}} No active tasks.</p>
-  {{end}}
+  <ul class="checks">
+    {{if .Data.TasksErr}}
+      <li class="error-text">{{template "icon-alert" .}} Could not check active tasks: node unreachable.</li>
+    {{else if gt .Data.ActiveTasks 0}}
+      <li class="warn-text">{{template "icon-alert" .}} {{.Data.ActiveTasks}} task(s) still active: the shutdown waits until they finish.</li>
+    {{else}}
+      <li>{{template "icon-check" .}} No active tasks.</li>
+    {{end}}
+    {{if .Data.ScrubErr}}
+      <li class="error-text">{{template "icon-alert" .}} Could not check ZFS scrubs.</li>
+    {{else if .Data.Scrubbing}}
+      <li class="error-text">{{template "icon-alert" .}} ZFS scrub running on {{range .Data.Scrubbing}}<span class="mono">{{.}}</span> {{end}}: wait for it to finish.</li>
+    {{else}}
+      <li>{{template "icon-check" .}} No ZFS scrub running.</li>
+    {{end}}
+    {{if .Data.LastWakeOK}}
+      <li>{{template "icon-check" .}} Last successful Wake-on-LAN: <span class="mono">{{.Data.LastWakeOK.Format "Mon 2 Jan 15:04"}}</span></li>
+    {{else}}
+      <li class="warn-text">{{template "icon-alert" .}} No successful Wake-on-LAN recorded yet: make sure you can wake the host before relying on it.</li>
+    {{end}}
+  </ul>
 </div>
 
 <form hx-post="/host/shutdown" hx-target="body" data-stepup>
   <div class="card">
     <h2>Wake up again</h2>
-    <label><input type="radio" name="wake" value="schedule" checked> At next schedule</label>
-    <label><input type="radio" name="wake" value="date"> On a date</label>
-    <input type="datetime-local" name="date">
+    <label><input type="radio" name="wake" value="schedule" checked> At next schedule{{if .Data.NextOn}} · <span class="mono">{{.Data.NextOn.Format "Mon 15:04"}}</span>{{else}} (none this week){{end}}</label>
+    <label><input type="radio" name="wake" value="date"> On a date (vacation)</label>
+    <input type="datetime-local" name="date" aria-label="Wake-up date and time">
     <label><input type="radio" name="wake" value="manual"> Only manually</label>
   </div>
-  <button type="submit" class="btn btn-danger">Confirm with passkey</button>
-  <a href="/" class="btn">Cancel</a>
+  <div class="actions">
+    <button type="submit" class="btn btn-danger" {{if not .Data.ChecksPass}}disabled{{end}}>Confirm with passkey</button>
+    <a href="/" class="btn">Cancel</a>
+  </div>
 </form>
 {{end}}

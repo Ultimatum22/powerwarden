@@ -26,6 +26,7 @@ var pages = mustParsePages(
 // fragments are htmx partial responses with no layout wrapping.
 var fragments = template.Must(template.New("").Funcs(funcMap).ParseFS(assets.Templates,
 	"templates/partial_host.html", "templates/partial_weather.html", "templates/partial_guests.html",
+	"templates/partial_totp_setup.html",
 ))
 
 func mustParsePages(names ...string) map[string]*template.Template {
