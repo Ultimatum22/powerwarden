@@ -262,4 +262,33 @@ func (c *HTTPClient) ShutdownHost(ctx context.Context) (UPID, error) {
 	return UPID(env.Data), nil
 }
 
+type zfsPool struct {
+	Name string `json:"name"`
+}
+
+type zfsPoolDetail struct {
+	// Scan is zpool status's "scan:" line, e.g. "scrub in progress since
+	// Sun Sep 14 00:24:01 2026" or "scrub repaired 0B in 00:10:12 ...".
+	Scan string `json:"scan"`
+}
+
+func (c *HTTPClient) ZFSScrubsInProgress(ctx context.Context) ([]string, error) {
+	var pools apiEnvelope[[]zfsPool]
+	if err := c.do(ctx, http.MethodGet, fmt.Sprintf("/api2/json/nodes/%s/disks/zfs", c.node), nil, nil, &pools); err != nil {
+		return nil, err
+	}
+	var scrubbing []string
+	for _, p := range pools.Data {
+		var detail apiEnvelope[zfsPoolDetail]
+		path := fmt.Sprintf("/api2/json/nodes/%s/disks/zfs/%s", c.node, url.PathEscape(p.Name))
+		if err := c.do(ctx, http.MethodGet, path, nil, nil, &detail); err != nil {
+			return nil, err
+		}
+		if strings.Contains(detail.Data.Scan, "in progress") {
+			scrubbing = append(scrubbing, p.Name)
+		}
+	}
+	return scrubbing, nil
+}
+
 var _ Client = (*HTTPClient)(nil)

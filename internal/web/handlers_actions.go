@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -102,19 +103,67 @@ func (s *Server) knownGuest(name string) bool {
 }
 
 func (s *Server) createOverride(w http.ResponseWriter, r *http.Request, target, action string, until *time.Time) {
+	if _, err := s.insertOverride(r, target, action, until); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	s.hxRefresh(w, r)
+}
+
+func (s *Server) insertOverride(r *http.Request, target, action string, until *time.Time) (int64, error) {
 	now := s.Clock.Now()
 	id, err := s.Store.CreateOverride(r.Context(), store.Override{
 		Target: target, Action: action, Until: until, CreatedBy: s.actor(r), CreatedAt: now,
 	})
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+		return 0, err
 	}
 	_ = s.Store.RecordEvent(r.Context(), store.Event{
 		At: now, Kind: "override_created", Target: target, Actor: s.actor(r), IP: s.clientIP(r),
 		Reason: fmt.Sprintf("action=%s override_id=%d", action, id),
 	})
-	s.hxRefresh(w, r)
+	return id, nil
+}
+
+// nextHostOn is when the host schedule next turns the host on, within
+// the coming week, or nil if it never does.
+func (s *Server) nextHostOn(now time.Time) *time.Time {
+	for _, b := range s.Schedules[s.Host.Schedule].Crossings(now, now.AddDate(0, 0, 8), s.Loc) {
+		if b.On {
+			t := b.At
+			return &t
+		}
+	}
+	return nil
+}
+
+// futureTime parses a form date/time and requires it to lie between now
+// and a year from now.
+func (s *Server) futureTime(v string) (time.Time, bool) {
+	t, err := s.parseDateTime(v)
+	now := s.Clock.Now()
+	if err != nil || !t.After(now) || t.After(now.AddDate(1, 0, 0)) {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
+// vacationStateKey holds the ID of the override that implements the
+// current vacation, telling it apart from a plain manual host shutdown
+// (both are host "off" overrides).
+const vacationStateKey = "web.vacation_override_id"
+
+// activeVacation returns the vacation override if one is in effect.
+func (s *Server) activeVacation(ctx context.Context) *store.Override {
+	idStr, ok, err := s.Store.GetState(ctx, vacationStateKey)
+	if err != nil || !ok {
+		return nil
+	}
+	ov, err := s.Store.EffectiveOverrideOf(ctx, "host", s.Clock.Now(), store.PowerActions...)
+	if err != nil || ov == nil || strconv.FormatInt(ov.ID, 10) != idStr {
+		return nil
+	}
+	return ov
 }
 
 func (s *Server) handleOverrideCancel(w http.ResponseWriter, r *http.Request) {
@@ -154,19 +203,23 @@ func (s *Server) handleHostShutdown(w http.ResponseWriter, r *http.Request) {
 	}
 	var until *time.Time
 	switch r.PostForm.Get("wake") {
+	case "schedule", "":
+		// Off until the host schedule next turns on; the override then
+		// expires and the schedule (with WoL) takes over. A schedule that
+		// never turns on within a week behaves like "manual".
+		until = s.nextHostOn(s.Clock.Now())
 	case "date":
-		if v := r.PostForm.Get("date"); v != "" {
-			if t, err := s.parseDateTime(v); err == nil {
-				until = &t
-			}
+		t, ok := s.futureTime(r.PostForm.Get("date"))
+		if !ok {
+			http.Error(w, "choose a wake-up date in the future", http.StatusBadRequest)
+			return
 		}
-	case "manual", "schedule", "":
-		// No override expiry: "manual" means stay off until explicitly
-		// woken; "schedule" means the host's own schedule will naturally
-		// want it on again, which the engine's regular reconciliation
-		// picks up once this override is cancelled or expires — since
-		// there's no natural expiry for "resume schedule", the shutdown
-		// page's radio choice is recorded via the event reason for now.
+		until = &t
+	case "manual":
+		// No expiry: stays off until woken from the dashboard or CLI.
+	default:
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
 	}
 	// Back to the dashboard rather than reloading the confirmation page.
 	w.Header().Set("HX-Redirect", "/")
@@ -178,23 +231,31 @@ func (s *Server) handleVacationStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	v := r.PostForm.Get("return")
-	if v == "" {
-		http.Error(w, "return date/time is required", http.StatusBadRequest)
+	t, ok := s.futureTime(r.PostForm.Get("return"))
+	if !ok {
+		http.Error(w, "choose a return date in the future", http.StatusBadRequest)
 		return
 	}
-	t, err := s.parseDateTime(v)
+	id, err := s.insertOverride(r, "host", "off", &t)
 	if err != nil {
-		http.Error(w, "invalid return date/time", http.StatusBadRequest)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	s.createOverride(w, r, "host", "off", &t)
+	if err := s.Store.SetState(r.Context(), vacationStateKey, strconv.FormatInt(id, 10)); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	_ = s.Store.RecordEvent(r.Context(), store.Event{
+		At: s.Clock.Now(), Kind: "vacation_start", Target: "host", Actor: s.actor(r), IP: s.clientIP(r),
+		Reason: "until " + t.In(s.Loc).Format(time.RFC3339),
+	})
+	s.hxRefresh(w, r)
 }
 
 func (s *Server) handleVacationEnd(w http.ResponseWriter, r *http.Request) {
 	now := s.Clock.Now()
-	ov, err := s.Store.EffectiveOverride(r.Context(), "host", now)
-	if err != nil || ov == nil {
+	ov := s.activeVacation(r.Context())
+	if ov == nil {
 		http.Error(w, "no active vacation", http.StatusBadRequest)
 		return
 	}
@@ -202,6 +263,7 @@ func (s *Server) handleVacationEnd(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	_ = s.Store.DeleteState(r.Context(), vacationStateKey)
 	_ = s.Store.RecordEvent(r.Context(), store.Event{At: now, Kind: "vacation_end", Target: "host", Actor: s.actor(r), IP: s.clientIP(r)})
 	s.hxRefresh(w, r)
 }

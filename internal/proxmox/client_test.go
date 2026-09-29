@@ -257,3 +257,26 @@ func TestInvalidFingerprintRejectedAtConstruction(t *testing.T) {
 		t.Fatal("expected error for invalid fingerprint")
 	}
 }
+
+func TestZFSScrubsInProgress(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api2/json/nodes/pve01/disks/zfs", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"data": []map[string]any{{"name": "rpool"}, {"name": "tank"}}})
+	})
+	mux.HandleFunc("/api2/json/nodes/pve01/disks/zfs/rpool", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"data": map[string]any{"scan": "scrub repaired 0B in 00:10:12 with 0 errors on Sun Sep 13 00:34:13 2026"}})
+	})
+	mux.HandleFunc("/api2/json/nodes/pve01/disks/zfs/tank", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"data": map[string]any{"scan": "scrub in progress since Sun Sep 13 00:24:01 2026"}})
+	})
+	srv := httptest.NewTLSServer(mux)
+	defer srv.Close()
+
+	got, err := newTestClient(t, srv).ZFSScrubsInProgress(context.Background())
+	if err != nil {
+		t.Fatalf("ZFSScrubsInProgress: %v", err)
+	}
+	if len(got) != 1 || got[0] != "tank" {
+		t.Fatalf("scrubbing = %v, want [tank]", got)
+	}
+}

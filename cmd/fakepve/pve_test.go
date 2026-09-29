@@ -210,3 +210,22 @@ func TestRequireLoopback(t *testing.T) {
 		}
 	}
 }
+
+func TestScrubControlShowsInProgress(t *testing.T) {
+	p, c, ft := newTestPVE(t)
+	side := httptest.NewServer(p.SideHandler())
+	defer side.Close()
+	resp, err := http.Post(side.URL+"/control/scrub?for=10m", "text/plain", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if got, err := c.ZFSScrubsInProgress(context.Background()); err != nil || len(got) != 1 || got[0] != "tank" {
+		t.Fatalf("during scrub: %v, %v", got, err)
+	}
+	ft.advance(11 * time.Minute)
+	if got, _ := c.ZFSScrubsInProgress(context.Background()); len(got) != 0 {
+		t.Fatalf("after scrub: %v", got)
+	}
+}

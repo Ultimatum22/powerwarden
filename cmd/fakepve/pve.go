@@ -46,11 +46,12 @@ type PVE struct {
 	now       func() time.Time
 	afterFunc func(time.Duration, func()) // time.AfterFunc, overridable in tests
 
-	mu     sync.Mutex
-	hostUp bool
-	guests []*guest
-	tasks  []*task
-	seq    int
+	mu         sync.Mutex
+	hostUp     bool
+	guests     []*guest
+	tasks      []*task
+	seq        int
+	scrubUntil time.Time // pool "tank" scrubs until then
 }
 
 // NewPVE returns a powered-on node with the demo guests.
@@ -194,6 +195,19 @@ func (p *PVE) APIHandler() http.Handler {
 		p.Logger.Info("guest task started", "guest", g.Name, "action", action, "takes", p.TaskTime)
 		writeData(w, upid)
 	})
+	mux.HandleFunc("GET "+nodes+"/disks/zfs", func(w http.ResponseWriter, r *http.Request) {
+		writeData(w, []map[string]any{{"name": "tank"}})
+	})
+	mux.HandleFunc("GET "+nodes+"/disks/zfs/tank", func(w http.ResponseWriter, r *http.Request) {
+		p.mu.Lock()
+		scrubbing := p.clock().Before(p.scrubUntil)
+		p.mu.Unlock()
+		scan := "scrub repaired 0B in 00:10:12 with 0 errors"
+		if scrubbing {
+			scan = "scrub in progress since " + p.clock().Format(time.ANSIC)
+		}
+		writeData(w, map[string]any{"name": "tank", "scan": scan})
+	})
 	mux.HandleFunc("GET "+nodes+"/tasks", func(w http.ResponseWriter, r *http.Request) {
 		type res struct {
 			UPID string `json:"upid"`
@@ -310,6 +324,7 @@ func (p *PVE) SideHandler() http.Handler {
 controls (POST):
   /control/guests/{name}/start|stop   as if done in the Proxmox UI
   /control/backup?for=2m              an active task (postpones host shutdown)
+  /control/scrub?for=10m              a ZFS scrub (fails the shutdown pre-check)
   /control/host/off|on                power cut / power button
 `)
 	})
@@ -354,6 +369,17 @@ controls (POST):
 		p.newTaskLocked("vzdump", "", d, nil)
 		p.Logger.Info("control: backup task running", "for", d)
 		fmt.Fprintf(w, "backup task running for %s\n", d)
+	})
+	mux.HandleFunc("POST /control/scrub", func(w http.ResponseWriter, r *http.Request) {
+		d, err := time.ParseDuration(r.URL.Query().Get("for"))
+		if err != nil || d <= 0 {
+			d = 10 * time.Minute
+		}
+		p.mu.Lock()
+		p.scrubUntil = p.clock().Add(d)
+		p.mu.Unlock()
+		p.Logger.Info("control: ZFS scrub on tank", "for", d)
+		fmt.Fprintf(w, "scrub running on tank for %s\n", d)
 	})
 	mux.HandleFunc("POST /control/host/{state}", func(w http.ResponseWriter, r *http.Request) {
 		switch r.PathValue("state") {

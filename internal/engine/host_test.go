@@ -320,3 +320,36 @@ func TestHostDryRunNeverSendsRealWoLOrShutdown(t *testing.T) {
 	}
 	assertStringSlices(t, eventKinds(t, teShutdown.Store), []string{"host_shutdown:host"})
 }
+
+func TestHostWakeCompletionIsRecorded(t *testing.T) {
+	fc := clock.NewFake(time.Date(2026, 1, 5, 8, 0, 0, 0, time.UTC))
+	fp := proxmox.NewFake()
+	fp.NodeReachable = false
+	te := hostTestSetup(t, alwaysOnSchedule(t), nil, nil, fc, fp, false)
+	ctx := context.Background()
+
+	if err := te.Tick(ctx); err != nil { // sends WoL
+		t.Fatalf("Tick: %v", err)
+	}
+	fp.NodeReachable = true // the host booted
+	fc.Advance(30 * time.Second)
+	if err := te.Tick(ctx); err != nil {
+		t.Fatalf("Tick after boot: %v", err)
+	}
+	assertStringSlices(t, eventKinds(t, te.Store), []string{"host_wake:host", "host_wake_ok:host"})
+	if at, ok, _ := te.Store.GetState(ctx, HostLastWakeOKKey); !ok || at != fc.Now().Format(time.RFC3339) {
+		t.Fatalf("%s = %q, %v", HostLastWakeOKKey, at, ok)
+	}
+	if n := len(te.notifier.Sent()); n != 2 {
+		t.Fatalf("notifications = %d, want 2 (waking, up)", n)
+	}
+
+	// Staying up doesn't record another wake.
+	fc.Advance(30 * time.Second)
+	if err := te.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(eventKinds(t, te.Store)); n != 2 {
+		t.Fatalf("events = %d after a steady tick, want 2", n)
+	}
+}

@@ -4,6 +4,8 @@
 //    shutdown, vacation, ignore-weather) first runs a fresh passkey
 //    assertion via /stepup/begin|finish, and is only sent once that
 //    succeeds (CLAUDE.md: "Step-up ... need a fresh passkey assertion").
+//  - Add passkey: [data-add-passkey] runs step-up, then a registration
+//    ceremony via /security/passkeys/begin|finish.
 //  - Feedback: failed htmx requests show a generic message in #flash
 //    instead of failing silently; details stay in the server log.
 (function () {
@@ -85,6 +87,33 @@
       .finally(function () {
         busy.removeAttribute("aria-busy");
       });
+  });
+
+  async function addPasskey(btn) {
+    if (btn.getAttribute("aria-busy") === "true") return;
+    btn.setAttribute("aria-busy", "true");
+    flash("");
+    try {
+      await stepUp();
+      const begin = await postJSON("/security/passkeys/begin");
+      const options = PublicKeyCredential.parseCreationOptionsFromJSON(begin.publicKey);
+      const credential = await navigator.credentials.create({ publicKey: options });
+      await postJSON("/security/passkeys/finish", { "X-Challenge-Id": begin.challengeId }, credential.toJSON());
+      window.location.reload();
+    } catch (err) {
+      if (err && err.name === "InvalidStateError") {
+        flash("That passkey is already registered.");
+      } else {
+        flash(stepUpMessage(err).replace("confirmation", "registration"));
+      }
+    } finally {
+      btn.removeAttribute("aria-busy");
+    }
+  }
+
+  document.addEventListener("click", function (evt) {
+    const btn = evt.target.closest("[data-add-passkey]");
+    if (btn) addPasskey(btn);
   });
 
   document.addEventListener("htmx:beforeRequest", function () {

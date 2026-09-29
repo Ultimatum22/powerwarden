@@ -220,6 +220,12 @@ th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: u
 
 .login-shell { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 16px; }
 .error-text { color: var(--danger-text); }
+.warn-text { color: var(--warn-text); }
+.qr { display: block; background: #fff; padding: 8px; border-radius: 10px; margin: 8px 0; }
+.break { overflow-wrap: anywhere; }
+.checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.checks li { display: flex; gap: 8px; align-items: flex-start; }
+button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .muted { color: var(--muted); }
 
 @media (min-width: 1024px) {

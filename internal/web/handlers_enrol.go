@@ -28,7 +28,7 @@ func (s *Server) handleEnrolPasskeyBegin(w http.ResponseWriter, r *http.Request)
 	}
 
 	wu := auth.WebAuthnUser{ID: store.SoleUserID, Name: "owner"}
-	creation, session, err := s.WebAuthn.BeginRegistration(wu)
+	creation, session, err := s.WebAuthn.BeginRegistration(wu, registrationOptions(nil)...)
 	if err != nil {
 		s.Logger.Error("web: begin enrolment registration", "error", err)
 		http.Error(w, "could not start enrolment", http.StatusInternalServerError)

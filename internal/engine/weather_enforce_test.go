@@ -200,3 +200,45 @@ func TestWeatherNotifyModeNeverEnforces(t *testing.T) {
 		t.Fatal("expected notify-only mode to never shut the host down, even at Danger")
 	}
 }
+
+// An ignore_weather override only bypasses the weather safeguard; it must
+// not shadow an earlier "off" override (vacation, manual shutdown) and
+// wake the host.
+func TestIgnoreWeatherDoesNotShadowHostOffOverride(t *testing.T) {
+	te, _, _ := newEnforceTestEngine(t, 10*time.Minute, time.Minute)
+	fc := te.Clock.(*clock.Fake)
+	ctx := context.Background()
+
+	if err := te.Tick(ctx); err != nil {
+		t.Fatalf("bootstrap tick: %v", err)
+	}
+	vacationEnd := fc.Now().Add(7 * 24 * time.Hour)
+	if _, err := te.Store.CreateOverride(ctx, store.Override{
+		Target: hostTarget, Action: "off", Until: &vacationEnd, CreatedBy: "user:owner", CreatedAt: fc.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := te.Tick(ctx); err != nil {
+		t.Fatalf("tick after vacation start: %v", err)
+	}
+	if te.fp.NodeReachable {
+		t.Fatal("expected the vacation override to shut the host down")
+	}
+
+	fc.Advance(time.Minute)
+	ignoreUntil := fc.Now().Add(time.Hour)
+	if _, err := te.Store.CreateOverride(ctx, store.Override{
+		Target: hostTarget, Action: "ignore_weather", Until: &ignoreUntil, CreatedBy: "user:owner", CreatedAt: fc.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		fc.Advance(time.Minute)
+		if err := te.Tick(ctx); err != nil {
+			t.Fatalf("tick with ignore_weather during vacation: %v", err)
+		}
+	}
+	if got := te.wolSender.count(); got != 0 {
+		t.Fatalf("WoL sends = %d: ignore_weather woke the host during a vacation", got)
+	}
+}

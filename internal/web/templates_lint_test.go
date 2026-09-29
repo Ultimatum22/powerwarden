@@ -60,34 +60,49 @@ func TestTemplatesAreCSPClean(t *testing.T) {
 	}
 }
 
-// stepUpRoutes are the POST routes wrapped in requireStepUp (routes.go).
-// Any htmx form posting to one must carry data-stepup, so app.js runs the
-// passkey assertion first; otherwise the request just gets a 403.
-var stepUpRoutes = []string{"/host/shutdown", "/vacation", "/vacation/end", "/weather/ignore"}
+// stepUpFormRoutes are the requireStepUp routes (routes.go) that htmx
+// forms post to. Such a form must carry data-stepup, so app.js runs the
+// passkey assertion first; otherwise the request just gets a 403. ({id}
+// matches a template action like {{.IDHex}}.) The passkey-registration
+// routes are driven by app.js directly and covered by softauthn_test.go.
+var stepUpFormRoutes = []string{
+	"/host/shutdown", "/vacation", "/vacation/end", "/weather/ignore",
+	"/security/passkeys/{id}/delete", "/security/totp/setup", "/security/totp/confirm", "/security/totp/disable",
+}
 
 var hxPostTag = regexp.MustCompile(`(?is)<[a-z]+\b[^>]*\bhx-post="([^"]*)"[^>]*>`)
 
-func TestStepUpFormsAreMarked(t *testing.T) {
-	protected := map[string]bool{}
-	for _, r := range stepUpRoutes {
-		protected[r] = true
+func routeMatcher(route string) *regexp.Regexp {
+	parts := strings.Split(route, "/")
+	for i, p := range parts {
+		if strings.HasPrefix(p, "{") {
+			parts[i] = `[^/]+`
+		} else {
+			parts[i] = regexp.QuoteMeta(p)
+		}
 	}
+	return regexp.MustCompile("^" + strings.Join(parts, "/") + "$")
+}
+
+func TestStepUpFormsAreMarked(t *testing.T) {
 	found := map[string]bool{}
 	for path, src := range templateSources(t) {
 		for _, m := range hxPostTag.FindAllStringSubmatch(src, -1) {
 			tag, target := m[0], m[1]
-			if !protected[target] {
-				continue
-			}
-			found[target] = true
-			if !strings.Contains(tag, "data-stepup") {
-				t.Errorf("%s: %q posts to step-up route %s without data-stepup", path, tag, target)
+			for _, route := range stepUpFormRoutes {
+				if !routeMatcher(route).MatchString(target) {
+					continue
+				}
+				found[route] = true
+				if !strings.Contains(tag, "data-stepup") {
+					t.Errorf("%s: %q posts to step-up route %s without data-stepup", path, tag, route)
+				}
 			}
 		}
 	}
-	for _, r := range stepUpRoutes {
+	for _, r := range stepUpFormRoutes {
 		if !found[r] {
-			t.Errorf("no template posts to step-up route %s; update stepUpRoutes if it was removed", r)
+			t.Errorf("no template posts to step-up route %s; update stepUpFormRoutes if it was removed", r)
 		}
 	}
 }
