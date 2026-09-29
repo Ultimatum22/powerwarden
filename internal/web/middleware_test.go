@@ -34,9 +34,12 @@ func TestSecurityHeadersOnEveryResponse(t *testing.T) {
 	h.Handler().ServeHTTP(rec, req)
 
 	checks := map[string]string{
-		"X-Content-Type-Options": "nosniff",
-		"Referrer-Policy":        "no-referrer",
-		"Permissions-Policy":     "interest-cohort=()",
+		"X-Content-Type-Options":       "nosniff",
+		"Referrer-Policy":              "no-referrer",
+		"Permissions-Policy":           "interest-cohort=()",
+		"Cross-Origin-Opener-Policy":   "same-origin",
+		"Cross-Origin-Resource-Policy": "same-origin",
+		"Cross-Origin-Embedder-Policy": "require-corp",
 	}
 	for header, want := range checks {
 		if got := rec.Header().Get(header); got != want {
