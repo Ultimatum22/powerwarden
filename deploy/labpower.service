@@ -8,13 +8,16 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/labpower serve -config /etc/labpower/config.yaml
+# %d is the credentials directory: the config is passed in like the
+# secrets, since the DynamicUser can't read root-owned 0600 files in /etc.
+ExecStart=/usr/local/bin/labpower serve -config %d/config.yaml
 Restart=on-failure
 RestartSec=5s
 
 # --- State and secrets ---
 DynamicUser=yes
 StateDirectory=labpower
+LoadCredential=config.yaml:/etc/labpower/config.yaml
 LoadCredential=proxmox-token:/etc/labpower/proxmox-token
 LoadCredential=notify-token:/etc/labpower/notify-token
 
