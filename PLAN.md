@@ -247,6 +247,20 @@ acceptable.
 
 ### Phase D: staged rollout on the Pi (field acceptance)
 
+**Prepared:** `docs/ROLLOUT.md` is the step-by-step runbook (commands,
+checks, acceptance and rollback per stage). The arm64 release build is
+verified (`make release`). Preparing it found and fixed two deployment
+bugs:
+
+- The DynamicUser service couldn't read its root-owned 0600
+  `/etc/labpower/config.yaml`. It now arrives via
+  `LoadCredential=config.yaml` and `-config %d/config.yaml` (tested with a
+  transient unit).
+- The runbook runs `enrol` as the service's dynamic user, not root, so
+  SQLite's WAL files stay writable.
+
+Running the stages needs the Pi.
+
 Each step runs for its full soak time before moving on. Rollback is always
 "set `dry_run: true`, restart".
 

@@ -13,7 +13,7 @@ installed by the LabyrinthStack repo's Ansible role. Manually:
 ```
 install -Dm755 labpower /usr/local/bin/labpower
 install -Dm644 deploy/labpower.service /etc/systemd/system/labpower.service
-install -Dm600 config.yaml /etc/labpower/config.yaml
+install -Dm600 config.yaml /etc/labpower/config.yaml   # passed to the service via LoadCredential
 install -Dm600 secrets/proxmox-token /etc/labpower/proxmox-token
 install -Dm600 secrets/notify-token /etc/labpower/notify-token
 systemctl daemon-reload
