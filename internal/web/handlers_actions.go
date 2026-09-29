@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Ultimatum22/powerwarden/internal/notify"
 	"github.com/Ultimatum22/powerwarden/internal/store"
 )
 
@@ -212,7 +213,7 @@ func (s *Server) handleWeatherIgnore(w http.ResponseWriter, r *http.Request) {
 	}
 	minutesStr := r.PostForm.Get("minutes")
 	minutes, err := strconv.Atoi(minutesStr)
-	if err != nil || minutes <= 0 {
+	if err != nil || minutes <= 0 || minutes > maxIgnoreWeatherMinutes {
 		http.Error(w, "invalid minutes", http.StatusBadRequest)
 		return
 	}
@@ -229,8 +230,18 @@ func (s *Server) handleWeatherIgnore(w http.ResponseWriter, r *http.Request) {
 		At: now, Kind: "weather_ignore", Target: "host", Actor: s.actor(r), IP: s.clientIP(r),
 		Reason: fmt.Sprintf("override_id=%d minutes=%d", id, minutes),
 	})
+	// CLAUDE.md: notify on any ignore-weather action.
+	s.notify(r, notify.Notification{
+		Title:    "labpower: weather safety bypassed",
+		Body:     fmt.Sprintf("%s ignored weather safety for %d minutes (until %s) from %s.", s.actor(r), minutes, until.In(s.Loc).Format("15:04"), s.clientIP(r)),
+		Priority: notify.PriorityHigh,
+	})
 	s.hxRefresh(w, r)
 }
+
+// maxIgnoreWeatherMinutes bounds one ignore-weather action, so a single
+// step-up can't switch storm protection off indefinitely.
+const maxIgnoreWeatherMinutes = 24 * 60
 
 func (s *Server) handleSchedulesPause(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
