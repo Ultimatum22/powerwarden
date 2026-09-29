@@ -12,6 +12,15 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 dev=$root/.dev
 bin=$root/bin/dev
 
+# A second instance would fail to bind, yet its health check would reach
+# the first one and report success, so refuse up front.
+for port in 8006 8007 8080; do
+	if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+		echo "dev: port $port is already in use (is make dev already running?)" >&2
+		exit 1
+	fi
+done
+
 mkdir -p "$dev/state"
 chmod 700 "$dev"
 [[ -f $dev/proxmox-token ]] || { umask 077; printf 'dev-secret' > "$dev/proxmox-token"; }

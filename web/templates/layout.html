@@ -6,14 +6,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}} · labpower</title>
   <link rel="stylesheet" href="/static/app.css">
+  <meta name="htmx-config" content='{"allowEval": false, "selfRequestsOnly": true, "includeIndicatorStyles": false}'>
   <script src="/static/htmx.min.js"></script>
-  <meta name="htmx-config" content='{"allowEval": false, "selfRequestsOnly": true}'>
+  <script src="/static/app.js" defer></script>
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>
   {{if .Vacation}}
   <div class="banner banner-warn">
     <span>Vacation mode is active.</span>
-    <form method="post" action="/vacation/end" hx-post="/vacation/end" hx-target="body">
+    <form hx-post="/vacation/end" hx-target="body" data-stepup>
       <button type="submit" class="btn btn-sm">End vacation now</button>
     </form>
   </div>
@@ -33,6 +34,7 @@
     </nav>
 
     <main class="content">
+      <div id="flash" class="flash" role="alert" hidden></div>
       {{template "content" .}}
     </main>
 

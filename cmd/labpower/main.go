@@ -46,8 +46,8 @@ Commands:
   status                Show host and guest status
   wake                  Send a Wake-on-LAN packet to the host
   guest start <name>    Start a guest now
-  guest stop <name>     Stop a guest now
-  serve                 Run the scheduler (web UI not yet implemented)
+  guest stop <name>     Shut down a guest now
+  serve                 Run the scheduler and the web UI
   host shutdown         Shut down the Proxmox host
   enrol                 Print a first-run enrolment link (valid 15 minutes)
 

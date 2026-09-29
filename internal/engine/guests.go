@@ -180,47 +180,15 @@ func (e *Engine) recordEvent(ctx context.Context, kind, target, actor string, dr
 	})
 }
 
-const (
-	defaultTaskPollInterval = 2 * time.Second
-	defaultTaskTimeout      = 2 * time.Minute
-)
-
-// waitForTask polls until upid finishes or times out. It uses real wall
-// time, not the injected Clock: Clock governs scheduling decisions, while
-// this is an operational wait on the actual Proxmox job. Against the fake
-// client used in tests, tasks are already complete on the first poll, so
-// this never actually sleeps in a test run.
+// waitForTask waits for upid using the engine's configured poll interval
+// and timeout (see proxmox.WaitTask). Against the fake client used in
+// tests, tasks are already complete on the first poll, so this never
+// actually sleeps in a test run.
 func (e *Engine) waitForTask(ctx context.Context, upid proxmox.UPID) error {
-	pollInterval := e.TaskPollInterval
-	if pollInterval <= 0 {
-		pollInterval = defaultTaskPollInterval
+	if err := proxmox.WaitTask(ctx, e.Proxmox, upid, e.TaskPollInterval, e.TaskTimeout); err != nil {
+		return fmt.Errorf("engine: %w", err)
 	}
-	timeout := e.TaskTimeout
-	if timeout <= 0 {
-		timeout = defaultTaskTimeout
-	}
-	deadline := time.Now().Add(timeout)
-
-	for {
-		status, err := e.Proxmox.TaskStatus(ctx, upid)
-		if err != nil {
-			return fmt.Errorf("engine: check task %s: %w", upid, err)
-		}
-		switch status.State {
-		case proxmox.TaskOK:
-			return nil
-		case proxmox.TaskError:
-			return fmt.Errorf("engine: task %s failed: %s", upid, status.ExitStatus)
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("engine: task %s did not complete within %s", upid, timeout)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(pollInterval):
-		}
-	}
+	return nil
 }
 
 // TopologicalOrder returns guest names ordered so every guest appears

@@ -195,6 +195,29 @@ th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: u
 .timeline-now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); }
 .timeline-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.7rem; font-family: var(--font-mono); }
 
+/* Utilities replacing inline style="" attributes, which the CSP
+   (style-src 'self') blocks. */
+[hidden] { display: none !important; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.card-flush { padding: 0; }
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.btn-block { width: 100%; }
+.narrow { width: 100%; max-width: 320px; }
+.lede { max-width: 320px; text-align: center; }
+
+/* Action feedback (web/static/app.js). */
+.flash {
+  background: rgba(182, 35, 36, 0.12);
+  border: 1px solid var(--danger-border);
+  color: var(--danger-text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+}
+[aria-busy="true"] { opacity: 0.6; cursor: progress; }
+
 .login-shell { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 16px; }
 .error-text { color: var(--danger-text); }
 .muted { color: var(--muted); }
