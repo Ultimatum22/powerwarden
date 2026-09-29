@@ -4,12 +4,20 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"strings"
 
 	assets "github.com/Ultimatum22/powerwarden/web"
 )
 
 var funcMap = template.FuncMap{
 	"pct": func(v float64) string { return fmt.Sprintf("%.2f%%", v) },
+	// title capitalises the first letter ("warning" -> "Warning").
+	"title": func(s string) string {
+		if s == "" {
+			return s
+		}
+		return strings.ToUpper(s[:1]) + s[1:]
+	},
 }
 
 // pages maps a page name (e.g. "dashboard") to its fully-parsed template:
@@ -19,19 +27,24 @@ var funcMap = template.FuncMap{
 // template literally named "content" in a shared set would just overwrite
 // each other.
 var pages = mustParsePages(
-	"dashboard", "timeline", "vacation", "events", "security",
+	"dashboard", "timeline", "vacation", "events", "security", "weather",
 	"login", "enrol", "host_shutdown",
 )
 
 // fragments are htmx partial responses with no layout wrapping.
-var fragments = template.Must(template.New("").Funcs(funcMap).ParseFS(assets.Templates,
+var fragments = template.Must(template.New("").Funcs(funcMap).ParseFS(assets.Templates, partialFiles...))
+
+// partialFiles are htmx fragments, also embedded in full pages (the
+// dashboard renders the same cards it polls).
+var partialFiles = []string{
+	"templates/icons.html", "templates/components.html",
 	"templates/partial_host.html", "templates/partial_weather.html", "templates/partial_guests.html",
 	"templates/partial_totp_setup.html",
-))
+}
 
 func mustParsePages(names ...string) map[string]*template.Template {
 	out := make(map[string]*template.Template, len(names))
-	base := template.Must(template.New("").Funcs(funcMap).ParseFS(assets.Templates, "templates/layout.html", "templates/icons.html"))
+	base := template.Must(template.New("").Funcs(funcMap).ParseFS(assets.Templates, append([]string{"templates/layout.html"}, partialFiles...)...))
 	for _, name := range names {
 		clone := template.Must(base.Clone())
 		out[name] = template.Must(clone.ParseFS(assets.Templates, "templates/"+name+".html"))
@@ -47,6 +60,7 @@ type pageData struct {
 	CSRFToken  string
 	Vacation   bool
 	SessionEnd string // human-readable, for the desktop sidebar session box
+	Now        string // local date/time for the header
 	Data       any
 }
 

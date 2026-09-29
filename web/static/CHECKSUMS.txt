@@ -5,7 +5,11 @@
 # htmx.org 2.0.4, https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js
 e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447  htmx.min.js
 
-# Self-hosted fonts (Space Grotesk, IBM Plex Sans, IBM Plex Mono, SIL OFL
-# licensed) are not yet vendored — app.css currently falls back to system
-# font stacks, which CLAUDE.md's design tokens explicitly allow ("Fallback
-# to system stacks"). Add their woff2 files and checksums here once vendored.
+# Fonts: Fontsource 5.3.0 (SIL OFL 1.1), Latin subset, from
+#   https://cdn.jsdelivr.net/npm/@fontsource/<family>@5.3.0/files/<family>-latin-<weight>-normal.woff2
+08949f728dc52d528e69b1667d15c89a5686a4ee9a296ff90983985f99c380f7  fonts/ibm-plex-mono-latin-400.woff2
+3b646991d30055a93a4ecc499713d4347953a74a947ecab435ab72070cbdab0e  fonts/ibm-plex-sans-latin-400.woff2
+8960851d691c054ed38e259bdcf1a6190d157b4203ed5bb32c632a863fb8ec2f  fonts/ibm-plex-sans-latin-600.woff2
+685bbbf69fa616df1ef81847c85fc76be097ddfb3468ff2257be54511ab3130f  fonts/space-grotesk-latin-600.woff2
+d0283623ef57e722fd0eb688a8041589670c608ab780cd3612d06ba6f153d3fd  fonts/LICENSE-ibm-plex.txt
+18a4de52385f6b988782639d5d0cc1326e5a8c2de9a7f01d7b20d9aedcc60943  fonts/LICENSE-space-grotesk.txt

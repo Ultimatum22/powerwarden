@@ -1,18 +1,29 @@
 /* labpower — dark theme only, mobile-first. Tokens per CLAUDE.md's UI spec. */
 
+/* Self-hosted, SIL OFL 1.1 (see static/fonts/LICENSE-*.txt), Latin
+   subset from Fontsource 5.3.0; pinned in static/CHECKSUMS.txt. */
 @font-face {
   font-family: "Space Grotesk";
-  src: local("Space Grotesk");
+  src: url("/static/fonts/space-grotesk-latin-600.woff2") format("woff2");
+  font-weight: 600;
   font-display: swap;
 }
 @font-face {
   font-family: "IBM Plex Sans";
-  src: local("IBM Plex Sans");
+  src: url("/static/fonts/ibm-plex-sans-latin-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("/static/fonts/ibm-plex-sans-latin-600.woff2") format("woff2");
+  font-weight: 600;
   font-display: swap;
 }
 @font-face {
   font-family: "IBM Plex Mono";
-  src: local("IBM Plex Mono");
+  src: url("/static/fonts/ibm-plex-mono-latin-400.woff2") format("woff2");
+  font-weight: 400;
   font-display: swap;
 }
 
@@ -71,6 +82,7 @@ button, .btn {
   min-width: 44px;
   cursor: pointer;
 }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 .btn-primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
 .btn-danger-outline { background: transparent; color: var(--danger-text); border-color: var(--danger-border); }
 .btn-danger { background: var(--danger); color: var(--text); border-color: var(--danger-border); }
@@ -88,6 +100,8 @@ input, select {
 }
 
 label { display: block; margin-bottom: 6px; color: var(--text-2); }
+label.radio { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0; }
+label.radio input { min-height: 0; width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
 
 .icon { width: 20px; height: 20px; flex: none; }
 
@@ -186,13 +200,6 @@ table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
 
-.timeline-track { position: relative; height: 22px; background: var(--surface-2); border-radius: 4px; margin: 4px 0; }
-.timeline-seg { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
-.timeline-seg-schedule { background: color-mix(in srgb, var(--accent) 55%, transparent); }
-.timeline-seg-override { background: var(--warn); }
-.timeline-seg-alwayson { background: color-mix(in srgb, var(--ok) 40%, transparent); }
-.timeline-seg-storm { background: color-mix(in srgb, var(--danger) 40%, transparent); }
-.timeline-now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); }
 .timeline-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.7rem; font-family: var(--font-mono); }
 
 /* Utilities replacing inline style="" attributes, which the CSP
@@ -206,6 +213,61 @@ th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: u
 .btn-block { width: 100%; }
 .narrow { width: 100%; max-width: 320px; }
 .lede { max-width: 320px; text-align: center; }
+
+/* Page structure. */
+.topbar { display: flex; align-items: center; gap: 12px; padding: 4px 16px; border-bottom: 1px solid var(--border); background: var(--nav); }
+.topbar .wordmark { padding: 12px 0; margin-right: auto; }
+.page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.desktop-only { display: none; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.card-head h2 { margin: 0; display: inline-flex; align-items: center; gap: 6px; }
+.big { font-size: 1.25rem; margin: 4px 0; color: var(--text); }
+.small { font-size: 0.8rem; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+.tiles .stat-value { font-size: 0.95rem; }
+
+/* Guests: cards on phones, table-like rows on desktop. */
+.guest-list { display: grid; gap: 0; }
+.guest-row { display: grid; gap: 8px; }
+.guest-id { display: flex; align-items: center; gap: 8px; }
+.guest-actions { margin-top: 0; }
+details.inline-form { display: inline-block; }
+details.inline-form > summary { list-style: none; display: inline-flex; align-items: center; }
+details.inline-form > summary::-webkit-details-marker { display: none; }
+details.inline-form[open] > form { margin-top: 8px; display: grid; gap: 8px; }
+
+/* Lists. */
+.upcoming, .event-list, .legend { list-style: none; padding: 0; margin: 0; }
+.upcoming li { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.upcoming li:last-child { border-bottom: 0; }
+.upcoming .mono { color: var(--text-2); margin-right: 6px; }
+.event { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.event:last-child { border-bottom: 0; }
+.event-time { color: var(--text-2); font-size: 0.85rem; }
+.event-actor { grid-column: 2; font-size: 0.8rem; }
+.filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.filter label { margin: 0; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; }
+
+/* Timeline: inline SVG tracks (rect x/width are attributes, not styles,
+   so they're allowed by the CSP). */
+.segmented { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; margin-bottom: 16px; }
+.segmented a { padding: 10px 16px; min-height: 44px; display: inline-flex; align-items: center; color: var(--text-2); text-decoration: none; background: var(--button); }
+.segmented a[aria-current="page"] { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.track-row { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; margin: 8px 0; }
+.track-label { font-size: 0.8rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track { width: 100%; height: 22px; display: block; }
+.track-bg { fill: var(--surface-2); }
+.seg-schedule { fill: color-mix(in srgb, var(--accent) 55%, transparent); }
+.seg-override { fill: var(--warn); }
+.seg-alwayson { fill: color-mix(in srgb, var(--ok) 40%, transparent); }
+.track-now { fill: var(--text); }
+.timeline-axis { margin-left: 104px; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; color: var(--muted); font-size: 0.85rem; }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
+.legend svg { width: 12px; height: 12px; }
 
 /* Action feedback (web/static/app.js). */
 .flash {
@@ -251,6 +313,21 @@ button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .session-box { margin-top: auto; padding: 16px; color: var(--muted); font-size: 0.75rem; }
   .content { max-width: 1024px; padding: 24px 32px; padding-bottom: 24px; }
   .bottom-tabs { display: none; }
-  .desktop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  .guest-table-wrap .card { padding: 0; }
+  .desktop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+  .desktop-only { display: revert; }
+  .actions.desktop-only { display: flex; }
+  .topbar { display: none; }
+  .session-box form { margin-top: 8px; }
+  .guest-list { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); margin-bottom: 16px; }
+  .guest-list .guest-row {
+    grid-template-columns: minmax(160px, 1.2fr) 120px 1.6fr minmax(220px, 1.4fr);
+    align-items: center;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    margin: 0;
+  }
+  .guest-list .guest-row:last-child { border-bottom: 0; }
+  .guest-list .guest-actions { grid-column: 4; grid-row: 1; justify-content: flex-end; margin: 0; }
+  .guest-list .override-strip { grid-column: 3 / 5; grid-row: 2; margin: 0; }
 }

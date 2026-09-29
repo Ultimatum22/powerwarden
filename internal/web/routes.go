@@ -32,6 +32,7 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /timeline", noStore(s.requireSession(redirectToLogin, s.handleTimeline)))
 	mux.HandleFunc("GET /vacation", noStore(s.requireSession(redirectToLogin, s.handleVacationPage)))
 	mux.HandleFunc("GET /events", noStore(s.requireSession(redirectToLogin, s.handleEvents)))
+	mux.HandleFunc("GET /weather", noStore(s.requireSession(redirectToLogin, s.handleWeatherPage)))
 	mux.HandleFunc("GET /security", noStore(s.requireSession(redirectToLogin, s.handleSecurityPage)))
 	mux.HandleFunc("GET /host/shutdown", noStore(s.requireSession(redirectToLogin, s.handleHostShutdownPage)))
 

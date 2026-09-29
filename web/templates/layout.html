@@ -26,12 +26,20 @@
       <a href="/" class="nav-item" {{if eq .ActiveNav "dashboard"}}aria-current="page"{{end}}>{{template "icon-power" .}} Dashboard</a>
       <a href="/timeline" class="nav-item" {{if eq .ActiveNav "timeline"}}aria-current="page"{{end}}>{{template "icon-chevron" .}} Timeline</a>
       <a href="/vacation" class="nav-item" {{if eq .ActiveNav "vacation"}}aria-current="page"{{end}}>{{template "icon-key" .}} Vacation</a>
+      <a href="/weather" class="nav-item" {{if eq .ActiveNav "weather"}}aria-current="page"{{end}}>{{template "icon-bolt" .}} Weather</a>
       <a href="/events" class="nav-item" {{if eq .ActiveNav "events"}}aria-current="page"{{end}}>{{template "icon-alert" .}} Events</a>
       <a href="/security" class="nav-item" {{if eq .ActiveNav "security"}}aria-current="page"{{end}}>{{template "icon-lock" .}} Security</a>
       <div class="session-box">
-        Signed in with passkey · via Pangolin{{if .SessionEnd}} · session ends in {{.SessionEnd}}{{end}}
+        Signed in{{if .SessionEnd}} · session ends in {{.SessionEnd}}{{end}}
+        <form hx-post="/logout" hx-target="body"><button type="submit" class="btn btn-sm">Sign out</button></form>
       </div>
     </nav>
+
+    <header class="topbar">
+      <span class="wordmark">labpower</span>
+      <span class="mono muted">{{.Now}}</span>
+      <a href="/security" class="btn icon-btn" aria-label="Account and security" {{if eq .ActiveNav "security"}}aria-current="page"{{end}}>{{template "icon-user" .}}</a>
+    </header>
 
     <main class="content">
       <div id="flash" class="flash" role="alert" hidden></div>

@@ -45,10 +45,10 @@
 <form hx-post="/host/shutdown" hx-target="body" data-stepup>
   <div class="card">
     <h2>Wake up again</h2>
-    <label><input type="radio" name="wake" value="schedule" checked> At next schedule{{if .Data.NextOn}} · <span class="mono">{{.Data.NextOn.Format "Mon 15:04"}}</span>{{else}} (none this week){{end}}</label>
-    <label><input type="radio" name="wake" value="date"> On a date (vacation)</label>
+    <label class="radio"><input type="radio" name="wake" value="schedule" checked> At next schedule{{if .Data.NextOn}} · <span class="mono">{{.Data.NextOn.Format "Mon 15:04"}}</span>{{else}} (none this week){{end}}</label>
+    <label class="radio"><input type="radio" name="wake" value="date"> On a date (vacation)</label>
     <input type="datetime-local" name="date" aria-label="Wake-up date and time">
-    <label><input type="radio" name="wake" value="manual"> Only manually</label>
+    <label class="radio"><input type="radio" name="wake" value="manual"> Only manually</label>
   </div>
   <div class="actions">
     <button type="submit" class="btn btn-danger" {{if not .Data.ChecksPass}}disabled{{end}}>Confirm with passkey</button>

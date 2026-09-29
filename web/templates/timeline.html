@@ -1,18 +1,34 @@
 {{define "content"}}
-<header><h1>Timeline</h1></header>
-<div class="card">
-  <h2>{{.Data.Day}}</h2>
-  <p class="muted">Coming up</p>
-  {{if .Data.Entries}}
-  <table>
-    <tbody>
-    {{range .Data.Entries}}
-      <tr><td class="mono">{{.Time}}</td><td>{{.Text}}</td></tr>
-    {{end}}
-    </tbody>
-  </table>
-  {{else}}
-  <p class="muted">No more schedule changes today.</p>
+<header class="page-head"><h1>Timeline</h1></header>
+<nav class="segmented" aria-label="Range">
+  <a href="/timeline?day=today" {{if eq .Data.View "today"}}aria-current="page"{{end}}>Today</a>
+  <a href="/timeline?day=tomorrow" {{if eq .Data.View "tomorrow"}}aria-current="page"{{end}}>Tomorrow</a>
+  <a href="/timeline?day=week" {{if eq .Data.View "week"}}aria-current="page"{{end}}>Week</a>
+</nav>
+<section class="card">
+  <h2>{{.Data.Title}}</h2>
+  <div class="timeline-axis">{{range .Data.Axis}}<span>{{.}}</span>{{end}}</div>
+  {{range .Data.Rows}}
+  <div class="track-row">
+    <span class="track-label mono">{{.Label}}</span>
+    <svg class="track" viewBox="0 0 1000 22" preserveAspectRatio="none" role="img" aria-label="{{.Summary}}">
+      <rect class="track-bg" x="0" y="0" width="1000" height="22" rx="4"/>
+      {{range .Segments}}<rect class="{{.Class}}" x="{{printf "%.1f" .X}}" y="0" width="{{printf "%.1f" .W}}" height="22" rx="3"/>{{end}}
+      {{if ge $.Data.NowX 0.0}}<rect class="track-now" x="{{printf "%.1f" $.Data.NowX}}" y="0" width="3" height="22"/>{{end}}
+    </svg>
+  </div>
   {{end}}
-</div>
+  <ul class="legend">
+    <li><svg viewBox="0 0 12 12" aria-hidden="true"><rect class="seg-schedule" width="12" height="12" rx="2"/></svg> Scheduled on</li>
+    <li><svg viewBox="0 0 12 12" aria-hidden="true"><rect class="seg-override" width="12" height="12" rx="2"/></svg> Override</li>
+    <li><svg viewBox="0 0 12 12" aria-hidden="true"><rect class="seg-alwayson" width="12" height="12" rx="2"/></svg> Always on</li>
+  </ul>
+</section>
+<section class="card">
+  <h2>Coming up</h2>
+  <ul class="upcoming">
+    {{range .Data.Upcoming}}<li><span class="mono">{{.Label}}</span> {{.Text}}</li>
+    {{else}}<li class="muted">Nothing in the next 24 hours.</li>{{end}}
+  </ul>
+</section>
 {{end}}

@@ -15,6 +15,9 @@ type Override struct {
 	CancelledAt *time.Time
 }
 
+// ActiveAt reports whether the override was in effect at instant t.
+func (o Override) ActiveAt(t time.Time) bool { return o.activeAt(t) }
+
 // activeAt reports whether the override was in effect at instant t: created
 // by then, not yet expired, and not cancelled.
 func (o Override) activeAt(t time.Time) bool {
