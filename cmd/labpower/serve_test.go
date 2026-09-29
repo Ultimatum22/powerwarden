@@ -61,6 +61,9 @@ notify:
   provider: ntfy
   url: https://ntfy.sh/labpower-test
 
+clock:
+  trust: system # tests must not depend on the machine's time sync
+
 auth:
   rp_id: power.example.com
   session_idle: 30m

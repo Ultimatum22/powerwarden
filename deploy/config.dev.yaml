@@ -64,6 +64,11 @@ notify:
   provider: ntfy
   url: http://127.0.0.1:8007/ntfy/labpower-dev # fakepve logs these as NOTIFY
 
+# Dev machines may not run systemd-timesyncd or have an RTC flag; trust
+# the system clock here. Never set this on the Pi.
+clock:
+  trust: system
+
 auth:
   rp_id: localhost
   session_idle: 30m

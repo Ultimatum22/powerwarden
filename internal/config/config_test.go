@@ -438,3 +438,46 @@ func FuzzParse(f *testing.F) {
 		_ = c.Validate()
 	})
 }
+
+func TestGuestWindowOutsideHostWindowRejected(t *testing.T) {
+	secret := writeSecret(t)
+	// evenings runs to 00:30; a host schedule ending at 00:00 leaves the
+	// guest on while the host is off.
+	yaml := strings.Replace(validYAML(secret), `- { days: mon-fri, on: "07:00", off: "01:00" }`, `- { days: mon-fri, on: "07:00", off: "00:00" }`, 1)
+	c, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	err = c.Validate()
+	if err == nil || !strings.Contains(err.Error(), "guests.vm-media") || !strings.Contains(err.Error(), "tue 00:00") {
+		t.Fatalf("expected vm-media to be rejected at tue 00:00, got: %v", err)
+	}
+}
+
+func TestRequiredWindowOutsideHostScheduleWarns(t *testing.T) {
+	secret := writeSecret(t)
+	c, err := Parse([]byte(validYAML(secret)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	// trivy is Mon 05:30–07:00; daytime only starts at 07:00.
+	w := c.Warnings()
+	if len(w) != 1 || !strings.Contains(w[0], `"trivy"`) || !strings.Contains(w[0], "mon 05:30") {
+		t.Fatalf("Warnings() = %q, want one trivy warning at mon 05:30", w)
+	}
+
+	yaml := strings.Replace(validYAML(secret), `from: "05:30", to: "07:00"`, `from: "08:00", to: "09:00"`, 1)
+	c, err = Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if w := c.Warnings(); len(w) != 0 {
+		t.Fatalf("Warnings() = %q, want none for a window inside the host schedule", w)
+	}
+}
