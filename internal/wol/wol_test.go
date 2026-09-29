@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -184,5 +185,34 @@ func TestRouterAPISenderErrorsOnNonSuccessStatus(t *testing.T) {
 	sender := RouterAPISender{URL: srv.URL}
 	if err := sender.Send(context.Background(), mustMAC(t, "aa:bb:cc:dd:ee:ff")); err == nil {
 		t.Fatal("expected error for 500 response")
+	}
+}
+
+func TestUnicastSenderUsesConfiguredPort(t *testing.T) {
+	addr, received := fakeUDPListener(t)
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mac := mustMAC(t, "aa:bb:cc:dd:ee:ff")
+	if err := (UnicastSender{Target: host, Port: port}).Send(context.Background(), mac); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+
+	packets := waitForPackets(t, received, 1)
+	want, _ := MagicPacket(mac)
+	if !bytes.Equal(packets[0], want) {
+		t.Fatalf("received packet = % x, want % x", packets[0], want)
+	}
+}
+
+func TestUDPAddrDefaultsToPort9(t *testing.T) {
+	if got := udpAddr("10.22.10.250", 0); got != "10.22.10.250:9" {
+		t.Fatalf("udpAddr default = %q, want 10.22.10.250:9", got)
 	}
 }

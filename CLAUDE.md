@@ -97,6 +97,7 @@ Key properties the implementation must preserve:
 ```
 labpower/
   cmd/labpower/main.go        # flags, wiring, subcommands (serve, status, wake, guest, check-config)
+  cmd/fakepve/                # dev-only fake Proxmox + WoL target + ntfy sink (never released)
   internal/config/            # YAML load + validation
   internal/schedule/          # PURE functions: window evaluation, boundaries (no I/O)
   internal/clock/             # Clock interface + real and fake implementations
@@ -113,7 +114,9 @@ labpower/
   web/static/                 # css, htmx.min.js, self-hosted fonts (embedded)
   deploy/labpower.service     # hardened systemd unit
   deploy/config.example.yaml
-  Makefile                    # build, test, lint, vuln, release
+  deploy/config.dev.yaml      # template for `make dev` (loopback only)
+  scripts/dev.sh              # local dev loop: fakepve + labpower serve
+  Makefile                    # build, test, lint, vuln, release, dev
 ```
 
 `schedule` must stay free of I/O. `engine` depends only on interfaces (`proxmox.Client`, `wol.Sender`, `weather.Monitor`, `notify.Notifier`, `clock.Clock`, `store.Store`) so it can simulate a week in milliseconds in tests.

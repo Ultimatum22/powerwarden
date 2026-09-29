@@ -20,7 +20,7 @@ const cspHeader = "default-src 'self'; script-src 'self'; style-src 'self'; img-
 // cross-origin check) on every request. Per-route auth/step-up middleware
 // is applied when routes are registered (see routes.go).
 func (s *Server) withGlobalMiddleware(next http.Handler) http.Handler {
-	cop := newCrossOriginProtection(s.PublicHostname)
+	cop := newCrossOriginProtection(s.PublicOrigin)
 
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", cspHeader)

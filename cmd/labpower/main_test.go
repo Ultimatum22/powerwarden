@@ -117,7 +117,7 @@ notify:
   url: https://ntfy.sh/labpower-test
 
 auth:
-  rp_id: localhost
+  rp_id: power.example.com
   session_idle: 30m
   session_absolute: 12h
 `

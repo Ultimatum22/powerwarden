@@ -53,7 +53,7 @@ notify:
   url: https://ntfy.sh/labpower-test
 
 auth:
-  rp_id: localhost
+  rp_id: power.example.com
   session_idle: 30m
   session_absolute: 12h
 `
@@ -220,6 +220,13 @@ func TestWoLMethodValidation(t *testing.T) {
 			wantErr: "wol.mac",
 		},
 		{
+			name: "port out of range",
+			mutate: func(y string) string {
+				return strings.Replace(y, "  target: 10.22.10.250\n", "  target: 10.22.10.250\n  port: 70000\n", 1)
+			},
+			wantErr: "wol.port",
+		},
+		{
 			name: "unicast without target",
 			mutate: func(y string) string {
 				return strings.Replace(y, "  target: 10.22.10.250\n", "", 1)
@@ -236,6 +243,54 @@ func TestWoLMethodValidation(t *testing.T) {
 			}
 			if err := c.Validate(); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("expected error containing %q, got: %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestPublicURLAndOriginValidation(t *testing.T) {
+	secret := writeSecret(t)
+	tests := []struct {
+		name       string
+		publicURL  string
+		rpID       string
+		notifyURL  string
+		wantErr    string // empty: must validate
+		wantOrigin string
+	}{
+		{name: "https", publicURL: "https://power.example.com", rpID: "power.example.com", wantOrigin: "https://power.example.com"},
+		{name: "rp id is parent domain", publicURL: "https://power.example.com", rpID: "example.com", wantOrigin: "https://power.example.com"},
+		{name: "http on localhost for dev", publicURL: "http://localhost:8080", rpID: "localhost", notifyURL: "http://127.0.0.1:8007/ntfy/dev", wantOrigin: "http://localhost:8080"},
+		{name: "http on a real host", publicURL: "http://power.example.com", rpID: "power.example.com", wantErr: "public_url"},
+		{name: "missing", publicURL: "", rpID: "power.example.com", wantErr: "public_url is required"},
+		{name: "not a URL", publicURL: "power.example.com", rpID: "power.example.com", wantErr: "public_url"},
+		{name: "rp id unrelated to host", publicURL: "https://power.example.com", rpID: "localhost", wantErr: "auth.rp_id"},
+		{name: "rp id is a lookalike suffix", publicURL: "https://power.example.com", rpID: "ample.com", wantErr: "auth.rp_id"},
+		{name: "http notify on a real host", publicURL: "https://power.example.com", rpID: "power.example.com", notifyURL: "http://ntfy.sh/topic", wantErr: "notify.url"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			yaml := strings.Replace(validYAML(secret), "public_url: https://power.example.com", "public_url: "+tt.publicURL, 1)
+			yaml = strings.Replace(yaml, "rp_id: power.example.com", "rp_id: "+tt.rpID, 1)
+			if tt.notifyURL != "" {
+				yaml = strings.Replace(yaml, "url: https://ntfy.sh/labpower-test", "url: "+tt.notifyURL, 1)
+			}
+			c, err := Parse([]byte(yaml))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			err = c.Validate()
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("expected error containing %q, got: %v", tt.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Validate: %v", err)
+			}
+			if got := c.PublicOrigin(); got != tt.wantOrigin {
+				t.Fatalf("PublicOrigin() = %q, want %q", got, tt.wantOrigin)
 			}
 		})
 	}

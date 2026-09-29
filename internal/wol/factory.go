@@ -13,9 +13,9 @@ import (
 func New(cfg config.WoL) (Sender, error) {
 	switch cfg.Method {
 	case "unicast":
-		return UnicastSender{Target: cfg.Target}, nil
+		return UnicastSender{Target: cfg.Target, Port: cfg.Port}, nil
 	case "broadcast":
-		return BroadcastSender{Target: cfg.Target}, nil
+		return BroadcastSender{Target: cfg.Target, Port: cfg.Port}, nil
 	case "router_api":
 		return RouterAPISender{
 			URL:     cfg.RouterAPI.URL,

@@ -20,6 +20,7 @@ wol:
   method: unicast # router_api | unicast | broadcast — TODO(owner)
   mac: "aa:bb:cc:dd:ee:ff" # TODO(owner)
   target: 10.22.10.250 # unicast: static-ARP IP; broadcast: 10.22.10.255
+  # port: 9 # UDP port for unicast/broadcast (default 9)
   retries: 3
   wake_timeout: 5m
   # Only used when method: router_api. The exact API is TODO(owner) until
