@@ -84,8 +84,16 @@ func runHost(ctx context.Context, args []string, logger *slog.Logger) error {
 			continue
 		}
 		fmt.Printf("stopping %s (vmid %d)...\n", g.Name, g.VMID)
-		if _, err := client.ShutdownGuest(ctx, g.Kind, g.VMID); err != nil {
+		upid, err := client.ShutdownGuest(ctx, g.Kind, g.VMID)
+		if err != nil {
 			return fmt.Errorf("stop guest %q: %w", g.Name, err)
+		}
+		// Wait for each guest before the next (reverse dependency order)
+		// and before the node itself; if one doesn't stop cleanly, leave
+		// the host up rather than pull it out from under that guest.
+		if err := proxmox.WaitTask(ctx, client, upid, 0, 0); err != nil {
+			logger.Error("host shutdown: guest did not stop, host left running", "actor", "cli", "guest", g.Name, "error", err)
+			return fmt.Errorf("guest %q did not shut down cleanly, host left running: %w", g.Name, err)
 		}
 		logger.Info("host shutdown: stopped guest", "actor", "cli", "guest", g.Name, "vmid", g.VMID)
 	}

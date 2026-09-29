@@ -141,7 +141,7 @@ These values must not be guessed. Most of them block Phase D.
 
 ## 5. The plan
 
-### Phase A: unblock the UI (code, ~1–2 sessions)
+### Phase A: unblock the UI ✅ done (branch `phase-a`)
 
 1. `stepup.js` + `data-stepup` forms, applied to host shutdown, vacation start
    and end, ignore-weather, and future security-settings actions.
@@ -150,6 +150,11 @@ These values must not be guessed. Most of them block Phase D.
 4. Fix the `serve` help text.
 5. Make the CLI host shutdown wait for guest tasks (§3.1 item 3).
 6. httptest: the full step-up round trip for each protected route.
+
+Status: items 1–6 done. Step-up is covered end to end by a software
+passkey in `internal/web/softauthn_test.go` (real assertion, all four
+protected routes, expiry, wrong key/origin, replay). Still to confirm by
+hand in a real browser, since no authenticator runs in CI.
 
 **Done when:** from a real browser via `LIVE=1 make dev` you can enrol, log in, start and stop a guest, and shut the host down with step-up,
 with zero CSP violations in the console.

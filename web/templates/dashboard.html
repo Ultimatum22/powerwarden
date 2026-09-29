@@ -19,7 +19,7 @@
     </form>
   </div>
   {{end}}
-  <div style="margin-top:12px; display:flex; gap:8px;">
+  <div class="actions">
     <form hx-post="/host/wake" hx-target="body"><button type="submit" class="btn">Keep on tonight</button></form>
     <a href="/host/shutdown" class="btn btn-danger-outline">Shut down…</a>
   </div>
@@ -30,15 +30,15 @@
   <div class="stat-label">WEATHER</div>
   <span class="pill {{if eq .Data.Weather.Level "danger"}}pill-danger{{else if eq .Data.Weather.Level "warning"}}pill-warn{{else if eq .Data.Weather.Level "watch"}}pill-warn{{else}}pill-running{{end}}">{{.Data.Weather.Level}}</span>
   {{if eq .Data.Weather.Level "warning"}}
-  <form hx-post="/weather/ignore" hx-target="body" style="margin-top:8px;">
+  <form hx-post="/weather/ignore" hx-target="body" class="mt-8" data-stepup>
     <input type="hidden" name="minutes" value="60">
-    <button type="submit" class="btn btn-sm">Cancel shutdown (step-up)</button>
+    <button type="submit" class="btn btn-sm">Cancel shutdown (passkey)</button>
   </form>
   {{end}}
 </section>
 
 <section>
-  <div style="display:flex; justify-content:space-between; align-items:center;">
+  <div class="section-head">
     <h2>Guests</h2>
     <a href="/timeline">View timeline</a>
   </div>
@@ -70,7 +70,7 @@
       {{end}}
     </div>
     {{if not .AlwaysOn}}
-    <div style="display:flex; gap:8px;">
+    <div class="actions">
       <form hx-post="/guests/{{.Name}}/start" hx-target="body">
         <input type="hidden" name="duration" value="2h">
         <button type="submit" class="btn btn-sm">Start for 2h</button>

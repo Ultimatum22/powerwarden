@@ -89,6 +89,10 @@ func TestHostShutdownLiveStopsGuestsThenHost(t *testing.T) {
 		calls = append(calls, "guest-shutdown:201")
 		writeJSON(w, map[string]any{"data": "UPID:pve01:guest-shutdown"})
 	})
+	mux.HandleFunc("/api2/json/nodes/pve01/tasks/UPID:pve01:guest-shutdown/status", func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, "task-done:201")
+		writeJSON(w, map[string]any{"data": map[string]any{"status": "stopped", "exitstatus": "OK"}})
+	})
 	mux.HandleFunc("/api2/json/nodes/pve01/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			calls = append(calls, "host-shutdown")
@@ -105,9 +109,48 @@ func TestHostShutdownLiveStopsGuestsThenHost(t *testing.T) {
 		t.Fatalf("run host shutdown: %v", err)
 	}
 
-	// lxc-forge is always_on and must never be touched; vm-media must stop
-	// before the host does.
-	if len(calls) != 2 || calls[0] != "guest-shutdown:201" || calls[1] != "host-shutdown" {
-		t.Fatalf("calls = %v, want [guest-shutdown:201 host-shutdown]", calls)
+	// lxc-forge is always_on and must never be touched; vm-media's
+	// shutdown task must finish before the host is shut down.
+	want := "guest-shutdown:201 task-done:201 host-shutdown"
+	if got := strings.Join(calls, " "); got != want {
+		t.Fatalf("calls = %v, want [%s]", calls, want)
+	}
+}
+
+func TestHostShutdownLeavesHostUpWhenGuestTaskFails(t *testing.T) {
+	hostShutdown := false
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api2/json/cluster/resources", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{
+			"data": []map[string]any{
+				{"id": "qemu/201", "type": "qemu", "vmid": 201, "name": "vm-media", "node": "pve01", "status": "running"},
+			},
+		})
+	})
+	mux.HandleFunc("/api2/json/nodes/pve01/tasks", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"data": []map[string]any{}})
+	})
+	mux.HandleFunc("/api2/json/nodes/pve01/qemu/201/status/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"data": "UPID:pve01:guest-shutdown"})
+	})
+	mux.HandleFunc("/api2/json/nodes/pve01/tasks/UPID:pve01:guest-shutdown/status", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"data": map[string]any{"status": "stopped", "exitstatus": "shutdown timeout"}})
+	})
+	mux.HandleFunc("/api2/json/nodes/pve01/status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			hostShutdown = true
+		}
+		writeJSON(w, map[string]any{"data": "UPID:pve01:host-shutdown"})
+	})
+	srv := httptest.NewTLSServer(mux)
+	defer srv.Close()
+	cfgPath := writeTestConfig(t, srv, false)
+
+	err := run(context.Background(), []string{"host", "shutdown", "-config", cfgPath, "-yes"}, testLogger())
+	if err == nil || !strings.Contains(err.Error(), "host left running") {
+		t.Fatalf("expected an error saying the host was left running, got: %v", err)
+	}
+	if hostShutdown {
+		t.Fatal("host was shut down although a guest failed to stop")
 	}
 }

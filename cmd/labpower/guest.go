@@ -79,7 +79,12 @@ func runGuest(ctx context.Context, args []string, logger *slog.Logger) error {
 		return err
 	}
 
-	fmt.Printf("%s guest %s (vmid %d): task %s\n", action, name, target.VMID, upid)
-	logger.Info("guest: action sent", "actor", "cli", "dry_run", false, "action", action, "guest", name, "vmid", target.VMID, "upid", string(upid))
+	fmt.Printf("%s guest %s (vmid %d): task %s, waiting...\n", action, name, target.VMID, upid)
+	if err := proxmox.WaitTask(ctx, client, upid, 0, 0); err != nil {
+		logger.Error("guest: task failed", "actor", "cli", "dry_run", false, "action", action, "guest", name, "vmid", target.VMID, "upid", string(upid), "error", err)
+		return err
+	}
+	fmt.Println("done")
+	logger.Info("guest: action done", "actor", "cli", "dry_run", false, "action", action, "guest", name, "vmid", target.VMID, "upid", string(upid))
 	return nil
 }

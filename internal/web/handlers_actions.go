@@ -167,6 +167,8 @@ func (s *Server) handleHostShutdown(w http.ResponseWriter, r *http.Request) {
 		// there's no natural expiry for "resume schedule", the shutdown
 		// page's radio choice is recorded via the event reason for now.
 	}
+	// Back to the dashboard rather than reloading the confirmation page.
+	w.Header().Set("HX-Redirect", "/")
 	s.createOverride(w, r, "host", "off", until)
 }
 

@@ -41,9 +41,10 @@
 
   document.getElementById("totp-link").addEventListener("click", function (e) {
     e.preventDefault();
-    document.getElementById("totp-form").style.display = "block";
-    document.getElementById("passkey-btn").style.display = "none";
-    e.target.style.display = "none";
+    document.getElementById("totp-form").hidden = false;
+    document.getElementById("passkey-btn").hidden = true;
+    e.target.hidden = true;
+    document.getElementById("code").focus();
   });
 
   document.getElementById("totp-form").addEventListener("submit", async function (e) {

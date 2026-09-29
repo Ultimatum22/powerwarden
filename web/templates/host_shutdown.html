@@ -28,7 +28,7 @@
   {{end}}
 </div>
 
-<form hx-post="/host/shutdown" hx-target="body">
+<form hx-post="/host/shutdown" hx-target="body" data-stepup>
   <div class="card">
     <h2>Wake up again</h2>
     <label><input type="radio" name="wake" value="schedule" checked> At next schedule</label>
