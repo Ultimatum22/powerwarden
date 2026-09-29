@@ -116,7 +116,48 @@ func (s *Server) timelineRows(ctx context.Context, from, to time.Time, step time
 		}
 		rows = append(rows, row)
 	}
+	if s.Engine != nil {
+		rows = append(rows, s.stormTrack(s.Engine.LastWeather().Result.ThunderHours, from, to))
+	}
 	return rows, nil
+}
+
+// stormTrack marks forecast hours with a thunderstorm code.
+func (s *Server) stormTrack(hours []time.Time, from, to time.Time) trackRow {
+	row := trackRow{Label: "Storm risk", Summary: "Storm risk (forecast): none in this period"}
+	span := float64(to.Sub(from))
+	n := 0
+	for _, h := range hours {
+		start, end := h, h.Add(time.Hour)
+		if !end.After(from) || !start.Before(to) {
+			continue
+		}
+		start, end = maxTime(start, from), minTime(end, to)
+		row.Segments = append(row.Segments, segment{
+			X: trackUnits * float64(start.Sub(from)) / span,
+			W: trackUnits * float64(end.Sub(start)) / span,
+			Class: "seg-storm",
+		})
+		n++
+	}
+	if n > 0 {
+		row.Summary = fmt.Sprintf("Storm risk (forecast): thunderstorms possible in %d hour(s) of this period", n)
+	}
+	return row
+}
+
+func maxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
+}
+
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
 }
 
 // track samples one row's state every step and merges equal neighbours

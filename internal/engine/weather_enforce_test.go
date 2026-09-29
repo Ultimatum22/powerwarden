@@ -22,7 +22,7 @@ func newEnforceTestEngine(t *testing.T, warningCountdown, shutdownGrace time.Dur
 
 	lightning := &weather.FakeLightning{}
 	warnings := &weather.FakeWarnings{}
-	monitor := weather.NewMonitor(weather.Config{
+	monitor := newUncachedMonitor(weather.Config{
 		Location: weather.Point{}, Lightning: lightning, Warnings: warnings,
 		WarningRadiusKM: 30, DangerRadiusKM: 12,
 	}, fc.Now())

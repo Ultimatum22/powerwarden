@@ -298,3 +298,40 @@ func TestResultStringDoesNotPanic(t *testing.T) {
 		t.Error("expected a non-empty summary string")
 	}
 }
+
+func TestForecastFetchedOncePerInterval(t *testing.T) {
+	cfg := baseConfig()
+	fc := &FakeForecast{Data: Forecast{ThunderstormExpected: true, ThunderHours: []time.Time{time.Unix(0, 0)}}}
+	cfg.Forecast = fc
+	cfg.ForecastInterval = 30 * time.Minute
+	start := time.Now()
+	m := NewMonitor(cfg, start)
+
+	for i := range 60 { // 30 minutes of 30-second ticks
+		r := m.Evaluate(context.Background(), start.Add(time.Duration(i)*30*time.Second))
+		if r.Level != Watch || len(r.ThunderHours) != 1 {
+			t.Fatalf("tick %d: %+v, want Watch with the cached thunder hours", i, r)
+		}
+		if r.Stale {
+			t.Fatalf("tick %d: a cached forecast was reported stale", i)
+		}
+	}
+	if fc.Calls != 1 {
+		t.Fatalf("forecast fetched %d times in one interval, want 1", fc.Calls)
+	}
+	m.Evaluate(context.Background(), start.Add(30*time.Minute))
+	if fc.Calls != 2 {
+		t.Fatalf("forecast fetched %d times after the interval, want 2", fc.Calls)
+	}
+
+	// A failing refresh isn't hidden by the cache: past stale_after, the
+	// source goes stale.
+	fc.Err = errors.New("down")
+	var r Result
+	for i := 1; i <= 25; i++ {
+		r = m.Evaluate(context.Background(), start.Add(60*time.Minute+time.Duration(i)*30*time.Second))
+	}
+	if !r.Stale {
+		t.Fatal("forecast failing for 12 minutes after its interval expired should be stale")
+	}
+}

@@ -242,7 +242,33 @@ func (s *Server) weatherView(ctx context.Context) weatherView {
 		wv.ShutdownIn = humanDuration(max(at.Sub(now), 0))
 	}
 	wv.Headline = headline(r, wv.Level)
+	if w := s.thunderWindow(r.ThunderHours, now); w != "" && (wv.Level == "watch" || wv.Level == "normal") {
+		wv.Headline = "Thunderstorms possible " + w
+	}
 	return wv
+}
+
+// thunderWindow renders the first run of consecutive forecast thunder
+// hours that hasn't ended yet, e.g. "18:00–22:00" or "Wed 18:00–22:00".
+func (s *Server) thunderWindow(hours []time.Time, now time.Time) string {
+	var start, end time.Time
+	for _, h := range hours {
+		if !h.Add(time.Hour).After(now) {
+			continue // already over
+		}
+		switch {
+		case start.IsZero():
+			start, end = h, h.Add(time.Hour)
+		case h.Equal(end):
+			end = h.Add(time.Hour)
+		default:
+			return s.whenLabel(start) + "–" + end.In(s.Loc).Format("15:04")
+		}
+	}
+	if start.IsZero() {
+		return ""
+	}
+	return s.whenLabel(start) + "–" + end.In(s.Loc).Format("15:04")
 }
 
 func headline(r weather.Result, level string) string {

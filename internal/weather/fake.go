@@ -39,11 +39,13 @@ func (f *FakeWarnings) ActiveWarnings(_ context.Context) ([]AlertWarning, error)
 
 // FakeForecast is a settable ForecastSource for tests.
 type FakeForecast struct {
-	Data Forecast
-	Err  error
+	Data  Forecast
+	Err   error
+	Calls int // how many times Forecast was called
 }
 
 func (f *FakeForecast) Forecast(_ context.Context) (Forecast, error) {
+	f.Calls++
 	if f.Err != nil {
 		return Forecast{}, f.Err
 	}
