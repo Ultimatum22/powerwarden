@@ -133,6 +133,10 @@ func (s *Server) guestViews(ctx context.Context) ([]guestView, error) {
 			gv.Kind, gv.VMID, gv.Status, gv.Found = kindLabel(g.Kind), g.VMID, string(g.Status), true
 		} else if !reachable {
 			gv.Status = "unknown"
+		} else if gc.AlwaysOn {
+			// Expected: always-on guests are outside the API token's ACL
+			// (CLAUDE.md), so the cluster listing doesn't include them.
+			gv.Status = "protected"
 		} else {
 			gv.Status = "not found"
 		}
