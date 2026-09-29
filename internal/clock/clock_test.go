@@ -1,6 +1,8 @@
 package clock
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -29,8 +31,42 @@ func TestFakeSetTrusted(t *testing.T) {
 	}
 }
 
-func TestRealClockTrustedForPlausibleTime(t *testing.T) {
-	if !(Real{}).Trusted() {
-		t.Fatal("expected the real clock to be trusted when the system time is plausible")
+func TestRealAnyPlausibleSkipsEvidence(t *testing.T) {
+	dir := t.TempDir()
+	c := Real{SyncMarker: filepath.Join(dir, "none"), RTCHCToSys: filepath.Join(dir, "none"), AnyPlausible: true}
+	if !c.Trusted() {
+		t.Fatal("AnyPlausible should trust a plausible system time without evidence")
+	}
+}
+
+func TestRealTrustedNeedsSyncOrRTC(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "synchronized")
+	hctosys := filepath.Join(dir, "hctosys")
+	write := func(path, v string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(v), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c := Real{SyncMarker: marker, RTCHCToSys: hctosys}
+
+	if c.Trusted() {
+		t.Fatal("trusted with neither NTP sync nor RTC")
+	}
+	write(hctosys, "0\n") // e.g. an RTC that didn't set the clock at boot
+	if c.Trusted() {
+		t.Fatal("trusted with hctosys=0")
+	}
+	write(hctosys, "1\n")
+	if !c.Trusted() {
+		t.Fatal("not trusted although the clock was set from the RTC")
+	}
+	if err := os.Remove(hctosys); err != nil {
+		t.Fatal(err)
+	}
+	write(marker, "")
+	if !c.Trusted() {
+		t.Fatal("not trusted although timesyncd reports synchronised")
 	}
 }

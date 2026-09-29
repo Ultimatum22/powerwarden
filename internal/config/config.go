@@ -33,7 +33,20 @@ type Config struct {
 	Weather         Weather             `yaml:"weather"`
 	Notify          Notify              `yaml:"notify"`
 	Auth            Auth                `yaml:"auth"`
+	Clock           Clock               `yaml:"clock"`
 }
+
+// Clock configures when the system clock is trusted enough for the engine
+// to act (CLAUDE.md: "never acts before the clock is trustworthy").
+type Clock struct {
+	// Trust is "ntp_or_rtc" (default): NTP-synchronised or set from a real
+	// RTC at boot. "system" trusts any plausible system time, for local
+	// development only.
+	Trust string `yaml:"trust"`
+}
+
+// TrustAnyPlausibleClock reports whether clock.trust is "system".
+func (c *Config) TrustAnyPlausibleClock() bool { return c.Clock.Trust == "system" }
 
 // Proxmox holds connection details for the Proxmox VE API.
 type Proxmox struct {
@@ -270,6 +283,17 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateNotify()...)
 	errs = append(errs, c.validateWeather()...)
 	errs = append(errs, c.validateAuth()...)
+	switch c.Clock.Trust {
+	case "", "ntp_or_rtc", "system":
+	default:
+		errs = append(errs, fmt.Errorf("clock.trust %q must be \"ntp_or_rtc\" or \"system\"", c.Clock.Trust))
+	}
+	if len(errs) == 0 {
+		// Only meaningful once every schedule, guest and the timezone
+		// parsed cleanly.
+		loc, _ := time.LoadLocation(c.Timezone)
+		errs = append(errs, c.validateCoverage(loc)...)
+	}
 
 	return joinNonNil(errs)
 }
@@ -468,9 +492,8 @@ func (c *Config) validateSchedules() []error {
 			errs = append(errs, fmt.Errorf("required_windows[%d].to: %w", i, err))
 		}
 	}
-	// Whether each required_window actually falls inside the host's
-	// schedule is a cross-check the engine performs at load time
-	// (milestone 4, once the host state machine exists), not here.
+	// Whether each required_window falls inside the host's schedule is a
+	// warning, not an error: see Warnings.
 	return errs
 }
 

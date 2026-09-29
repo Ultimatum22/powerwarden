@@ -70,6 +70,11 @@ notify:
   url: https://ntfy.sh/TODO
   token_file: ${CREDENTIALS_DIRECTORY}/notify-token
 
+# The engine only acts once the clock is NTP-synchronised
+# (systemd-timesyncd) or was set from the DS3231 RTC at boot.
+clock:
+  trust: ntp_or_rtc
+
 auth:
   rp_id: power.example.com # WebAuthn relying party
   session_idle: 30m

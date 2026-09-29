@@ -45,6 +45,9 @@ func runServe(ctx context.Context, args []string, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	for _, w := range cfg.Warnings() {
+		logger.Warn("config: " + w)
+	}
 	loc, err := time.LoadLocation(cfg.Timezone)
 	if err != nil {
 		return fmt.Errorf("timezone: %w", err)
@@ -87,7 +90,7 @@ func runServe(ctx context.Context, args []string, logger *slog.Logger) error {
 	}
 
 	eng, err := engine.New(engine.Config{
-		Clock:   clock.Real{},
+		Clock:   clock.Real{AnyPlausible: cfg.TrustAnyPlausibleClock()},
 		Proxmox: proxmoxClient,
 		Store:   st,
 		Logger:  logger,
