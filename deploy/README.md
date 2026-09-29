@@ -1,5 +1,8 @@
 # Deploying labpower
 
+For local development without any hardware, see "Local development" at
+the end of this file.
+
 Two ways to run labpower; pick one per host.
 
 ## systemd (the primary, documented deployment)
@@ -61,3 +64,42 @@ their `group_add` GIDs are Raspberry Pi OS's usual values — check
 works unmodified under either deployment: systemd's `LoadCredential=`
 sets that env var itself, and `docker-compose.yml` sets it to `/run/secrets`
 to match where Compose secrets mount.
+
+## Local development
+
+`make dev` runs labpower against `cmd/fakepve`, a stand-in for the Proxmox
+host, entirely on loopback. No real Proxmox, router, weather, or ntfy
+service is contacted.
+
+```
+make dev          # dry-run: labpower only logs what it would do
+LIVE=1 make dev   # dry_run: false: guests start/stop, host shuts down/wakes (all fake)
+make dev-enrol    # new enrolment link (15 min) until a passkey is registered
+make dev-reset    # wipe .dev/ (passkeys, sessions, overrides, events, config)
+```
+
+On the first run it prints an enrolment link. Open it in Chrome or
+Firefox **at `http://localhost:8080`** (not 127.0.0.1: WebAuthn is bound
+to `localhost`) and register a passkey. Plain http is accepted only
+because the host is loopback; config validation rejects http anywhere
+else.
+
+fakepve serves:
+
+| Address | What |
+|---|---|
+| `https://127.0.0.1:8006` | Proxmox API subset, self-signed cert pinned via `.dev/fingerprint` |
+| `udp://127.0.0.1:40009` | Wake-on-LAN target: a magic packet for `aa:bb:cc:dd:ee:ff` boots the host |
+| `http://127.0.0.1:8007/` | status page; ntfy sink (notifications appear in the log as `NOTIFY`) |
+
+Simulate things that happen outside labpower:
+
+```
+curl -X POST 127.0.0.1:8007/control/guests/vm-media/start   # start from the Proxmox UI
+curl -X POST '127.0.0.1:8007/control/backup?for=5m'         # active task, postpones shutdown
+curl -X POST 127.0.0.1:8007/control/host/off                # power cut
+curl -X POST 127.0.0.1:8007/control/host/on                 # power button
+```
+
+The rendered config is `.dev/config.yaml`. Edit it (schedules, guests,
+weather providers) and restart `make dev`.

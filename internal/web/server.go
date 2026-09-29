@@ -52,11 +52,11 @@ type Server struct {
 	SecretBox  *auth.SecretBox
 	CSRFKey    []byte // HMAC key for per-session CSRF tokens
 
-	LoginLimiter   *auth.RateLimiter
-	StepUpLimiter  *auth.RateLimiter
-	TrustedProxy   string
-	RPID           string
-	PublicHostname string // for CSP/origin checks and cookie scoping context
+	LoginLimiter  *auth.RateLimiter
+	StepUpLimiter *auth.RateLimiter
+	TrustedProxy  string
+	RPID          string
+	PublicOrigin  string // scheme://host of public_url, for the cross-origin check
 
 	// Guests/Schedules/Host/Loc mirror engine.Config's scheduling inputs,
 	// so pages can describe "what the schedule says" (e.g. "Shuts down at
@@ -91,7 +91,7 @@ type Config struct {
 	TrustedProxy  string
 	RPID          string
 
-	PublicHostname string
+	PublicOrigin string
 
 	Guests    []engine.GuestConfig
 	Schedules map[string]schedule.Schedule
@@ -109,26 +109,26 @@ func New(cfg Config) (*Server, error) {
 		cfg.CSRFKey = key
 	}
 	s := &Server{
-		Store:          cfg.Store,
-		Engine:         cfg.Engine,
-		Proxmox:        cfg.Proxmox,
-		Notifier:       cfg.Notifier,
-		Logger:         cfg.Logger,
-		Clock:          cfg.Clock,
-		Sessions:       cfg.Sessions,
-		WebAuthn:       cfg.WebAuthn,
-		Challenges:     cfg.Challenges,
-		SecretBox:      cfg.SecretBox,
-		CSRFKey:        cfg.CSRFKey,
-		LoginLimiter:   cfg.LoginLimiter,
-		StepUpLimiter:  cfg.StepUpLimiter,
-		TrustedProxy:   cfg.TrustedProxy,
-		RPID:           cfg.RPID,
-		PublicHostname: cfg.PublicHostname,
-		Guests:         cfg.Guests,
-		Schedules:      cfg.Schedules,
-		Host:           cfg.Host,
-		Loc:            cfg.Loc,
+		Store:         cfg.Store,
+		Engine:        cfg.Engine,
+		Proxmox:       cfg.Proxmox,
+		Notifier:      cfg.Notifier,
+		Logger:        cfg.Logger,
+		Clock:         cfg.Clock,
+		Sessions:      cfg.Sessions,
+		WebAuthn:      cfg.WebAuthn,
+		Challenges:    cfg.Challenges,
+		SecretBox:     cfg.SecretBox,
+		CSRFKey:       cfg.CSRFKey,
+		LoginLimiter:  cfg.LoginLimiter,
+		StepUpLimiter: cfg.StepUpLimiter,
+		TrustedProxy:  cfg.TrustedProxy,
+		RPID:          cfg.RPID,
+		PublicOrigin:  cfg.PublicOrigin,
+		Guests:        cfg.Guests,
+		Schedules:     cfg.Schedules,
+		Host:          cfg.Host,
+		Loc:           cfg.Loc,
 	}
 	if s.Logger == nil {
 		s.Logger = slog.New(slog.DiscardHandler)

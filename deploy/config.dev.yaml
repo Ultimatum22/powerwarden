@@ -1,0 +1,70 @@
+# Local development config, rendered into .dev/config.yaml by scripts/dev.sh
+# (`make dev`). It talks only to cmd/fakepve on loopback: a fake Proxmox
+# API, a fake Wake-on-LAN target, and an ntfy sink that logs notifications.
+# Never deploy this file; deploy/config.example.yaml is the real template.
+#
+# @DEV_DIR@, @FINGERPRINT@ and @DRY_RUN@ are filled in by scripts/dev.sh.
+# Once rendered, .dev/config.yaml is yours to edit; `make dev-reset`
+# starts over from this template.
+
+dry_run: @DRY_RUN@
+timezone: Europe/Amsterdam
+listen: 127.0.0.1:8080
+# Plain http is accepted for loopback hosts only; browsers treat localhost
+# as a secure context, so passkeys and the __Host- cookie still work.
+public_url: http://localhost:8080
+trusted_proxy: 127.0.0.1
+
+proxmox:
+  url: https://127.0.0.1:8006
+  node: pve01
+  token_id: labpower@pve!pi
+  token_secret_file: @DEV_DIR@/proxmox-token
+  tls_fingerprint: "@FINGERPRINT@"
+
+wol:
+  method: unicast
+  mac: "aa:bb:cc:dd:ee:ff"
+  target: 127.0.0.1
+  port: 40009 # fakepve's WoL listener (real hosts use the default, 9)
+  retries: 3
+  wake_timeout: 1m
+
+schedules:
+  daytime:
+    - { days: mon-fri, on: "07:00", off: "01:00" }
+    - { days: sat-sun, on: "09:00", off: "01:30" }
+  evenings:
+    - { days: mon-sun, on: "17:00", off: "00:30" }
+
+required_windows:
+  - { name: trivy, days: mon, from: "05:30", to: "07:00" }
+
+host:
+  schedule: daytime
+  shutdown_grace: 2m
+
+guests:
+  lxc-forge: { always_on: true }
+  lxc-edge: { always_on: true }
+  vm-media: { schedule: evenings, depends_on: [] }
+  lxc-arr: { schedule: evenings, depends_on: [vm-media] }
+  # vm-scratch exists in fakepve but is deliberately unmanaged.
+
+weather:
+  mode: notify
+  # No providers configured, so dev runs fully offline. To try the real
+  # (free, keyless) Open-Meteo forecast and MeteoAlarm warnings, add:
+  #   location: { lat: 52.37, lon: 4.90 }
+  #   forecast: { provider: open-meteo, interval: 30m }
+  #   warnings: { provider: meteoalarm, region: "netherlands" }
+  stale_after: 10m
+
+notify:
+  provider: ntfy
+  url: http://127.0.0.1:8007/ntfy/labpower-dev # fakepve logs these as NOTIFY
+
+auth:
+  rp_id: localhost
+  session_idle: 30m
+  session_absolute: 12h

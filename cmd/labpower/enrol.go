@@ -40,7 +40,7 @@ func runEnrol(ctx context.Context, args []string, logger *slog.Logger) error {
 		return err
 	}
 
-	link := fmt.Sprintf("https://%s/enrol?token=%s", publicHostname(cfg.PublicURL), token)
+	link := cfg.PublicOrigin() + "/enrol?token=" + token
 	fmt.Printf("Enrolment link (valid %s, single use):\n\n  %s\n\n", auth.EnrolTokenTTL, link)
 	logger.Info("enrol: token generated", "actor", "cli", "expires", now.Add(auth.EnrolTokenTTL).Format(time.RFC3339))
 	return nil

@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -186,9 +185,7 @@ func newWebServer(
 		return nil, err
 	}
 
-	publicHost := publicHostname(cfg.PublicURL)
-
-	wa, err := auth.NewWebAuthn(cfg.Auth.RPID, "labpower", []string{"https://" + publicHost})
+	wa, err := auth.NewWebAuthn(cfg.Auth.RPID, "labpower", []string{cfg.PublicOrigin()})
 	if err != nil {
 		return nil, err
 	}
@@ -214,22 +211,12 @@ func newWebServer(
 		TrustedProxy:  cfg.TrustedProxy,
 		RPID:          cfg.Auth.RPID,
 
-		PublicHostname: publicHost,
-		Guests:         guests,
-		Schedules:      schedules,
-		Host:           engine.HostConfig{Schedule: cfg.Host.Schedule, ShutdownGrace: cfg.Host.ShutdownGrace},
-		Loc:            loc,
+		PublicOrigin: cfg.PublicOrigin(),
+		Guests:       guests,
+		Schedules:    schedules,
+		Host:         engine.HostConfig{Schedule: cfg.Host.Schedule, ShutdownGrace: cfg.Host.ShutdownGrace},
+		Loc:          loc,
 	})
-}
-
-// publicHostname extracts the host from public_url (e.g.
-// "https://power.example.com" -> "power.example.com"), falling back to
-// the raw value if it doesn't parse as a URL.
-func publicHostname(publicURL string) string {
-	if u, err := url.Parse(publicURL); err == nil && u.Host != "" {
-		return u.Host
-	}
-	return publicURL
 }
 
 // loadOrCreateKey reads a 32-byte key from path, generating and persisting

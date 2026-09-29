@@ -49,6 +49,7 @@ type WoL struct {
 	Method      string        `yaml:"method"` // router_api | unicast | broadcast
 	MAC         string        `yaml:"mac"`
 	Target      string        `yaml:"target"`
+	Port        int           `yaml:"port"` // UDP port for unicast/broadcast; 0 means 9
 	Retries     int           `yaml:"retries"`
 	WakeTimeout time.Duration `yaml:"wake_timeout"`
 	RouterAPI   RouterAPI     `yaml:"router_api"`
@@ -189,6 +190,45 @@ func (c *Config) IsDryRun() bool {
 	return c.DryRun != nil && *c.DryRun
 }
 
+// PublicOrigin returns public_url's scheme and host (e.g.
+// "https://power.example.com"), the only origin browsers may use: WebAuthn
+// and the cross-origin check both compare against it. Callers must only use
+// this after Validate has accepted public_url.
+func (c *Config) PublicOrigin() string {
+	u, err := url.Parse(c.PublicURL)
+	if err != nil {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+// isLoopbackHost reports whether host (no port) names this machine, the
+// only case where plain http is acceptable: the traffic never leaves it.
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// httpsOrLoopbackURL checks raw is an absolute https URL, or http to a
+// loopback host (local development against cmd/fakepve).
+func httpsOrLoopbackURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return errors.New("must be an absolute URL")
+	}
+	switch {
+	case u.Scheme == "https":
+		return nil
+	case u.Scheme == "http" && isLoopbackHost(u.Hostname()):
+		return nil
+	default:
+		return errors.New("must use https (plain http is only allowed for localhost)")
+	}
+}
+
 // Validate checks the configuration for internal consistency. It returns a
 // single error joining every problem found, so the caller can report them
 // all at once (see check-config).
@@ -213,6 +253,11 @@ func (c *Config) Validate() error {
 			errs = append(errs, err)
 		}
 	}
+	if c.PublicURL == "" {
+		errs = append(errs, errors.New("public_url is required"))
+	} else if err := httpsOrLoopbackURL(c.PublicURL); err != nil {
+		errs = append(errs, fmt.Errorf("public_url %q %w", c.PublicURL, err))
+	}
 	if c.TrustedProxy != "" {
 		check(net.ParseIP(c.TrustedProxy) != nil, "trusted_proxy %q is not a valid IP", c.TrustedProxy)
 	}
@@ -234,11 +279,7 @@ func validateLoopbackListen(listen string) error {
 	if err != nil {
 		return fmt.Errorf("listen %q must be host:port: %w", listen, err)
 	}
-	if host == "localhost" {
-		return nil
-	}
-	ip := net.ParseIP(host)
-	if ip == nil || !ip.IsLoopback() {
+	if !isLoopbackHost(host) {
 		return fmt.Errorf("listen %q must bind a loopback address (labpower must not be reachable except via Newt)", listen)
 	}
 	return nil
@@ -280,8 +321,8 @@ func (c *Config) validateNotify() []error {
 	}
 	if c.Notify.URL == "" {
 		errs = append(errs, fmt.Errorf("notify.url is required"))
-	} else if u, err := url.Parse(c.Notify.URL); err != nil || u.Scheme != "https" {
-		errs = append(errs, fmt.Errorf("notify.url %q must be a valid https URL (a notifier outside the homelab)", c.Notify.URL))
+	} else if err := httpsOrLoopbackURL(c.Notify.URL); err != nil {
+		errs = append(errs, fmt.Errorf("notify.url %q %w (a notifier outside the homelab)", c.Notify.URL, err))
 	}
 	// notify.token_file is optional: some ntfy topics are unauthenticated.
 	if c.Notify.TokenFile != "" {
@@ -344,6 +385,14 @@ func (c *Config) validateAuth() []error {
 	var errs []error
 	if c.Auth.RPID == "" {
 		errs = append(errs, fmt.Errorf("auth.rp_id is required (the WebAuthn relying party ID)"))
+	} else if u, err := url.Parse(c.PublicURL); err == nil && u.Hostname() != "" {
+		// WebAuthn only accepts an RP ID equal to the origin's host or a
+		// parent domain of it; anything else makes every passkey
+		// ceremony fail at runtime, locking the owner out.
+		host := u.Hostname()
+		if host != c.Auth.RPID && !strings.HasSuffix(host, "."+c.Auth.RPID) {
+			errs = append(errs, fmt.Errorf("auth.rp_id %q must be public_url's host %q or a parent domain of it", c.Auth.RPID, host))
+		}
 	}
 	if c.Auth.SessionIdle <= 0 {
 		errs = append(errs, fmt.Errorf("auth.session_idle must be positive"))
@@ -383,6 +432,9 @@ func (c *Config) validateWoL() []error {
 		if c.WoL.RouterAPI.URL == "" {
 			errs = append(errs, fmt.Errorf("wol.router_api.url is required for method \"router_api\""))
 		}
+	}
+	if c.WoL.Port < 0 || c.WoL.Port > 65535 {
+		errs = append(errs, fmt.Errorf("wol.port %d must be between 1 and 65535 (or 0 for the default, 9)", c.WoL.Port))
 	}
 	if c.WoL.Retries < 0 {
 		errs = append(errs, fmt.Errorf("wol.retries must not be negative"))
