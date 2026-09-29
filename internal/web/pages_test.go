@@ -61,3 +61,17 @@ func TestEveryPageRenders(t *testing.T) {
 		t.Fatal("no link to older events with more than one page")
 	}
 }
+
+func TestUnknownPathIsNotFound(t *testing.T) {
+	h := newTestServer(t)
+	raw, _ := h.createTestSession(t)
+	for _, path := range []string{"/robots.txt", "/sitemap.xml", "/nope"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: raw})
+		rec := httptest.NewRecorder()
+		h.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", path, rec.Code)
+		}
+	}
+}

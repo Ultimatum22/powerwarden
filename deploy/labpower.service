@@ -19,25 +19,47 @@ LoadCredential=proxmox-token:/etc/labpower/proxmox-token
 LoadCredential=notify-token:/etc/labpower/notify-token
 
 # --- Sandboxing (CLAUDE.md: "Deployment hardening") ---
+# Note: systemd has no trailing comments; a "# ..." after a value becomes
+# part of the value (and an invalid one is ignored), so comments stay on
+# their own lines.
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-PrivateDevices=no            # needs /dev/i2c-1 and GPIO; granted via DeviceAllow below
+# The AS3935 sensor needs /dev/i2c-1 and the GPIO chip, so no
+# PrivateDevices; instead a closed device policy allows only these (plus
+# the standard pseudo-devices such as /dev/null and /dev/urandom).
+PrivateDevices=no
+DevicePolicy=closed
 DeviceAllow=/dev/i2c-1 rw
 DeviceAllow=/dev/gpiochip0 rw
 SupplementaryGroups=i2c gpio
+# Outbound HTTPS (weather, notifications), Proxmox and WoL need IPv4/IPv6.
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 CapabilityBoundingSet=
 SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+# Denied calls fail with EPERM instead of killing the process: the Go
+# runtime tries setrlimit (in @resources) at startup and copes with EPERM.
+SystemCallErrorNumber=EPERM
 SystemCallArchitectures=native
 MemoryDenyWriteExecute=yes
 LockPersonality=yes
 RestrictRealtime=yes
+RestrictSUIDSGID=yes
 RestrictNamespaces=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
+ProtectKernelLogs=yes
 ProtectControlGroups=yes
+# labpower only reads the clock (and rtc0/hctosys via sysfs) to decide
+# whether to trust it; it never sets it.
+ProtectClock=yes
+ProtectHostname=yes
+# Hide other processes. Not ProcSubset=pid: periph.io reads /proc to
+# detect the Raspberry Pi model.
+ProtectProc=invisible
+UMask=0077
 MemoryMax=150M
 
 [Install]

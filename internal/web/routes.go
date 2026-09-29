@@ -28,7 +28,7 @@ func (s *Server) routes() {
 	mux.HandleFunc("POST /enrol/passkey/finish", s.rateLimited(s.LoginLimiter, s.handleEnrolPasskeyFinish))
 
 	// Authenticated pages.
-	mux.HandleFunc("GET /", noStore(s.requireSession(redirectToLogin, s.handleDashboard)))
+	mux.HandleFunc("GET /{$}", noStore(s.requireSession(redirectToLogin, s.handleDashboard)))
 	mux.HandleFunc("GET /timeline", noStore(s.requireSession(redirectToLogin, s.handleTimeline)))
 	mux.HandleFunc("GET /vacation", noStore(s.requireSession(redirectToLogin, s.handleVacationPage)))
 	mux.HandleFunc("GET /events", noStore(s.requireSession(redirectToLogin, s.handleEvents)))

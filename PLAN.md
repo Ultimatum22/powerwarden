@@ -247,13 +247,36 @@ Tracked there, not here. Checklist from CLAUDE.md:
 
 ### Phase F: remote access ("manage it away from home")
 
+**Done locally (2026-09-29):**
+
+- **`systemd-analyze security` (M8):** the unit went from 2.3 to **1.5**
+  (target ≤ 2.0), checked with `--offline=true`.
+  - Added `ProtectClock`, `ProtectKernelLogs`, `ProtectHostname`,
+    `ProtectProc=invisible`, `UMask=0077`, `DevicePolicy=closed`,
+    `RestrictSUIDSGID`, and `SystemCallFilter=~@privileged @resources`
+    with `SystemCallErrorNumber=EPERM`.
+  - Fixed `PrivateDevices=no  # …`, which was silently ignored because
+    systemd has no trailing comments.
+  - labpower was run under the same seccomp, address-family, W^X and
+    umask settings (`systemd-run --user`) and served, ticked and wrote its
+    DB normally.
+  - Re-check on the Pi itself, since its systemd version may differ.
+- **OWASP ZAP baseline (M6):** run against a local instance, signed out
+  and signed in (session cookie injected): **no medium or high findings**.
+  - Fixed the Low findings: added COOP/CORP/COEP headers.
+  - Fixed unknown paths (e.g. `/robots.txt`) serving the dashboard; they
+    now return 404.
+  - Remaining: informational only (`no-store` on pages is intended), plus
+    htmx's `eval` code path, which is disabled.
+
+**Still to do (needs the deployment):**
+
 1. Pangolin **private** resource (client access only), owner-only role, 2FA
-   enforced, **no auth-bypass rules**. This already gives remote access without
-   public exposure.
-2. Run the OWASP ZAP baseline against the private URL. No medium or high
-   findings (closes **M6**).
-3. Do a manual security review: auth flows, step-up coverage, rate limits,
-   logs, and `/healthz`.
+   enforced, **no auth-bypass rules**.
+2. Re-run the ZAP baseline against the Pangolin URL (through Pangolin's
+   own auth, which adds its own headers).
+3. Manual security review: auth flows, step-up coverage, rate limits,
+   logs, `/healthz`.
 4. Only then, optionally, go public: CrowdSec + Geoblock on Pangolin.
 
 ### Phase G: later (M9)

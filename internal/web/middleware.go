@@ -27,6 +27,11 @@ func (s *Server) withGlobalMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Permissions-Policy", "interest-cohort=()")
+		// Cross-origin isolation: everything labpower loads is its own, so
+		// nothing legitimate needs another origin to embed or open it.
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
+		w.Header().Set("Cross-Origin-Embedder-Policy", "require-corp")
 
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
 
