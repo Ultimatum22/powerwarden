@@ -147,6 +147,10 @@ jobs:
           KO_DOCKER_REPO: localhost/labpower
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
+          # ko stamps images with the Unix epoch (1970) by default for
+          # reproducibility; use the commit time instead, which is still
+          # reproducible but shows a meaningful "created" date.
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           # --sbom=none: no extra sha256-….sbom artifacts next to the image.
           ko build ./cmd/labpower --bare --sbom=none --push=false --oci-layout-path oci-layout
 
