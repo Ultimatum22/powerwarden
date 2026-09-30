@@ -18,7 +18,7 @@ jobs:
       - homelab
       - proxmox
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Slim runner images lack make, and go test -race needs cgo (gcc + libc headers).
       - name: Install build tools
@@ -34,7 +34,7 @@ jobs:
             echo "::error::no supported package manager to install make/gcc"; exit 1
           fi
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
