@@ -1,32 +1,21 @@
 # syntax=docker/dockerfile:1
 
-# Builds the labpower binary and packages it in a minimal, non-root,
-# distroless image. Cross-compiles natively via Go's own toolchain rather
-# than emulation, so `docker buildx build --platform linux/amd64,linux/arm64`
-# is fast (the recommended pattern for Go multi-arch images).
+# Local build of the same image ko publishes in CI (see .ko.yaml).
 FROM --platform=$BUILDPLATFORM golang:1.27-bookworm AS build
 WORKDIR /src
-
 COPY go.mod go.sum ./
 RUN go mod download
-
 COPY . .
+ARG TARGETOS TARGETARCH VERSION=dev
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags "-s -w -X main.version=$VERSION" \
+    -o /out/labpower ./cmd/labpower \
+ && mkdir /out/state
 
-ARG TARGETOS
-ARG TARGETARCH
-ARG VERSION=dev
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" \
-    -o /out/labpower ./cmd/labpower
-
-# distroless/static: no shell, no package manager, just the binary, CA
-# certs (needed for the Proxmox/weather/notify HTTPS calls), and a
-# non-root user — the container-native equivalent of the systemd unit's
-# DynamicUser + extensive sandboxing in deploy/labpower.service.
+# distroless nonroot (UID 65532): no shell, just CA certs and the binary.
 FROM gcr.io/distroless/static-debian12:nonroot
-# Same path as the ko-built CI image, so docker exec commands are identical.
 COPY --from=build /out/labpower /ko-app/labpower
-
-USER nonroot:nonroot
+# Owned by nonroot so a fresh named volume mounted here inherits it.
+COPY --from=build --chown=65532:65532 /out/state /var/lib/labpower
 ENTRYPOINT ["/ko-app/labpower"]
 CMD ["serve"]
