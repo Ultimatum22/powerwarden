@@ -115,6 +115,9 @@ jobs:
           echo "key: $(printf '%s\n' "$key" | head -n1), $(printf '%s\n' "$key" | wc -l) lines"
           eval "$(ssh-agent -s)"
           printf '%s\n' "$key" | ssh-add -
+          # Public fingerprint: compare with `ssh-keygen -lf ~/.ssh/authorized_keys`
+          # for homelabuser on vm-registry.
+          ssh-add -l
           echo "SSH_AUTH_SOCK=${SSH_AUTH_SOCK}" >> "${GITHUB_ENV}"
           echo "SSH_AGENT_PID=${SSH_AGENT_PID}" >> "${GITHUB_ENV}"
 
@@ -149,6 +152,9 @@ jobs:
 
       - name: Fetch crane ${{ env.CRANE_VERSION }} for vm-registry (checksum-verified)
         run: |
+          if ! ssh-add -l >/dev/null 2>&1; then
+            echo "::error::ssh-agent from the 'Install SSH private key' step is not reachable (SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-unset})"; exit 1
+          fi
           # crane runs on vm-registry, so match its architecture, not the runner's.
           remote_arch="$(ssh ${SSH_OPTS} ${SSH_TARGET} uname -m)"
           case "$remote_arch" in
