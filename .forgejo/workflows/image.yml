@@ -32,6 +32,13 @@ jobs:
     runs-on:
       - homelab
       - proxmox
+    timeout-minutes: 45
+    env:
+      REGISTRY: 10.22.40.24:5555
+      REGISTRY_HOST: 10.22.40.24
+      SSH_TARGET: homelabuser@10.22.40.24
+      SSH_OPTS: "-F /dev/null -T -p 2809 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
+      SCP_OPTS: "-F /dev/null -P 2809 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
     steps:
       - name: Check registry settings
         env:
