@@ -1,0 +1,6 @@
+---
+- name: Restart labpower
+  community.docker.docker_container:
+    name: labpower
+    state: started
+    restart: true

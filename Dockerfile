@@ -24,8 +24,9 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 # non-root user — the container-native equivalent of the systemd unit's
 # DynamicUser + extensive sandboxing in deploy/labpower.service.
 FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=build /out/labpower /usr/local/bin/labpower
+# Same path as the ko-built CI image, so docker exec commands are identical.
+COPY --from=build /out/labpower /ko-app/labpower
 
 USER nonroot:nonroot
-ENTRYPOINT ["/usr/local/bin/labpower"]
+ENTRYPOINT ["/ko-app/labpower"]
 CMD ["serve"]

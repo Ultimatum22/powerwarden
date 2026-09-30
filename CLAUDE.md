@@ -115,6 +115,8 @@ labpower/
   deploy/labpower.service     # hardened systemd unit
   deploy/config.example.yaml
   deploy/config.dev.yaml      # template for `make dev` (loopback only)
+  deploy/ansible/roles/labpower/  # Ansible role: run the registry image as a hardened container
+  .ko.yaml                    # container image build (ko), used by .forgejo/workflows/image.yml
   scripts/dev.sh              # local dev loop: fakepve + labpower serve
   Makefile                    # build, test, lint, vuln, release, dev
 ```

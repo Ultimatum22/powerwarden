@@ -1,0 +1,30 @@
+---
+# Image built and pushed by .forgejo/workflows/image.yml. Pin a release tag
+# (or better, the digest the workflow prints) rather than :latest/:main.
+labpower_image: "{{ labpower_registry }}/labpower:v0.1.0"
+labpower_registry: ""            # registry host[:port], same as the Forgejo REGISTRY variable
+labpower_registry_username: ""   # pull-only credentials; leave empty for anonymous pulls
+labpower_registry_password: ""   # from vault
+
+# labpower's config.yaml as a dict (see deploy/config.example.yaml). Keep
+# dry_run: true until the rollout (docs/ROLLOUT.md) says otherwise. Secret
+# paths must stay ${CREDENTIALS_DIRECTORY}/proxmox-token and …/notify-token.
+labpower_config: {}
+
+# Secrets, from vault. Never put them in labpower_config.
+labpower_proxmox_token: ""
+labpower_notify_token: ""
+
+labpower_dir: /etc/labpower
+labpower_state_dir: /var/lib/labpower
+# The image runs as distroless "nonroot"; host files it reads are owned by it.
+labpower_uid: 65532
+
+# The AS3935 sensor (weather.local_sensor.enabled). Off: no devices mapped.
+labpower_sensor_enabled: false
+labpower_sensor_devices:
+  - /dev/i2c-1
+  - /dev/gpiochip0
+labpower_sensor_groups: [i2c, gpio]
+
+labpower_memory: 150m

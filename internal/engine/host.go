@@ -249,7 +249,7 @@ func (e *Engine) pursueWake(ctx context.Context, now time.Time) error {
 
 func (e *Engine) sendWoL(ctx context.Context) error {
 	if e.DryRun {
-		e.Logger.Info("dry-run: would send Wake-on-LAN", "mac", e.WoLMAC)
+		e.Logger.Info("dry-run: would send Wake-on-LAN", "mac", e.WoLMAC.String())
 		return nil
 	}
 	return e.WoLSender.Send(ctx, e.WoLMAC)

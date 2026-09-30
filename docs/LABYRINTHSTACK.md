@@ -56,6 +56,13 @@ Guest resources:
 
 ## 2. Ansible: the Pi and `roles/labpower`
 
+**Deployment is Docker (D8):** use the ready role in this repo,
+`deploy/ansible/roles/labpower`, with the image Forgejo pushes to the
+registry (see deploy/README.md). It covers the config, secrets, state dir,
+registry login and the hardened container. The systemd notes below apply
+only to the alternative install. The Pi still needs Docker, the RTC/I2C
+setup, no `fake-hwclock`, and Newt.
+
 - Inventory: add the Pi (`<pi-ip>`, VLAN 70) to `ansible/inventory/hosts`.
 - `roles/labpower`:
   - Download the release asset `labpower-<version>-linux-arm64` and

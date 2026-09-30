@@ -40,6 +40,16 @@ ntp_or_rtc`, the default).
 
 ## Stage 1: install, dry-run (7 days) — closes M2
 
+**Docker (the chosen deployment, D8):** tag a release so Forgejo pushes
+the image (`git tag v0.1.0 && git push --tags`), then run your playbook
+with `deploy/ansible/roles/labpower`, `dry_run: true` in `labpower_config`.
+In the stages below, replace `lp <cmd> …` with
+`docker exec labpower /ko-app/labpower <cmd> -config /etc/labpower/config.yaml`
+and `journalctl -u labpower` with `docker logs labpower` (journald also has
+it). Changing the config means changing the playbook vars and re-running;
+the role restarts the container. The systemd commands below remain valid
+for the alternative install.
+
 On the build machine (never on the Pi):
 
 ```sh
@@ -155,7 +165,9 @@ localhost (such a passkey would not work on the real domain).
 
 1. Pangolin private resource for the Pi's Newt → `127.0.0.1:8080`,
    owner-only, 2FA, no auth-bypass rules.
-2. On the Pi, run `enrol` **as the service's dynamic user** (running it as
+2. **Docker:** `docker exec labpower /ko-app/labpower enrol -config /etc/labpower/config.yaml`
+   (runs as the container's user against its live state).
+   **systemd:** run `enrol` **as the service's dynamic user** (running it as
    root could leave root-owned SQLite `-wal`/`-shm` files the service can't
    write):
 

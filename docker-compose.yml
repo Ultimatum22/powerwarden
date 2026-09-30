@@ -1,13 +1,18 @@
-# Docker packaging for labpower, alongside (not instead of) the systemd
-# unit in deploy/labpower.service — see deploy/README.md for the tradeoffs.
+# Docker packaging for labpower. For the homelab, the Ansible role in
+# deploy/ansible/roles/labpower runs the same container from the registry
+# image that .forgejo/workflows/image.yml publishes; this file is for
+# trying it by hand. See deploy/README.md.
 #
 # Before first run:
 #   cp deploy/config.example.yaml config.yaml   # then fill in every TODO(owner)
 #   mkdir -p secrets
 #   echo -n '<proxmox token secret>' > secrets/proxmox-token
 #   echo -n '<ntfy token>'           > secrets/notify-token
+#   sudo chown -R 65532:65532 config.yaml secrets && sudo chmod 0400 config.yaml secrets/*
+#   (the container runs as distroless "nonroot", 65532, and must read them)
 #
-# Then: docker compose up -d --build
+# Then either build locally:        docker compose up -d --build
+# or run the published image:       LABPOWER_IMAGE=<registry>/labpower:v1.2.3 docker compose up -d
 
 services:
   # One-shot: fixes the labpower-state volume's ownership to match the
@@ -25,7 +30,7 @@ services:
       context: .
       args:
         VERSION: ${VERSION:-dev}
-    image: labpower:${VERSION:-dev}
+    image: ${LABPOWER_IMAGE:-labpower:dev}
     container_name: labpower
     restart: unless-stopped
     depends_on:
@@ -54,9 +59,21 @@ services:
       - "998" # i2c
       - "997" # gpio
 
+    # Hardening: the container equivalent of the systemd unit's sandbox.
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 150m
+    pids_limit: 64
+
     volumes:
       - ./config.yaml:/etc/labpower/config.yaml:ro
       - labpower-state:/var/lib/labpower
+      # Clock trust (clock.trust: ntp_or_rtc) reads timesyncd's sync
+      # marker; the RTC flag (/sys/class/rtc/rtc0/hctosys) is visible via
+      # /sys. Without this mount only the RTC can make the clock trusted.
+      - /run/systemd/timesync:/run/systemd/timesync:ro
 
     secrets:
       - proxmox-token

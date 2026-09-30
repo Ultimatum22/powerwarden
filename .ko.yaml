@@ -1,0 +1,23 @@
+# ko builds the container image straight from the Go source: no Docker
+# daemon, no QEMU (Go cross-compiles), so it runs in any CI container.
+# Used by .forgejo/workflows/image.yml. The Dockerfile builds the same
+# image for local `docker compose build`.
+
+# distroless static, nonroot (UID/GID 65532), pinned by digest; Renovate
+# can bump it. Contains CA certificates and nothing else: no shell.
+defaultBaseImage: gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+
+# The Pi is arm64; amd64 keeps the image usable for `make dev`-style
+# testing on a laptop.
+defaultPlatforms:
+  - linux/arm64
+  - linux/amd64
+
+builds:
+  - id: labpower
+    main: ./cmd/labpower
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Env.VERSION}}

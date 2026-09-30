@@ -133,7 +133,7 @@ These values must not be guessed. Most of them block Phase D.
 | D5 | Timezone confirm; Trivy/Renovate required windows in local time | Config |
 | D6 | **Lightning network source.** Blitzortung is out (no public API). Candidates to research for terms and access: national met-office open data (e.g. KNMI), commercial APIs with a free private tier. Or accept "MeteoAlarm + AS3935 only". | Reliable weather enforce |
 | D7 | Location (lat/lon, 2 decimals), MeteoAlarm region code, ntfy topic URL | Weather, notify |
-| D8 | Deployment shape: **systemd unit (per spec)** or Docker? GitHub Actions, Forgejo, or both? The spec and LabyrinthStack assume systemd + Forgejo. Recommendation: systemd on the Pi, Forgejo CI, keep GitHub CI only if the repo is mirrored there. | Phase D/E |
+| D8 | ✅ **Decided 2026-09-30: Docker.** Forgejo CI (`image.yml`, ko) pushes to the owner's registry; the owner's homelab Ansible runs it with `deploy/ansible/roles/labpower`. systemd stays a supported alternative. Registry push address: set as Forgejo variable `REGISTRY`. | — |
 | D9 | Name: `labpower` or `powerwarden`? | Cosmetic, do before first release |
 | D10 | Pangolin hostname (`public_url`, `auth.rp_id`). **The RP ID can't change later without re-enrolling passkeys.** | Enrolment |
 

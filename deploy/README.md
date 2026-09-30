@@ -3,12 +3,116 @@
 For local development without any hardware, see "Local development" at
 the end of this file.
 
-Two ways to run labpower; pick one per host.
+Two ways to run labpower; pick one per host. **The homelab uses Docker**
+(registry image + Ansible); the systemd unit remains a supported
+alternative.
 
-## systemd (the primary, documented deployment)
+## Docker (the homelab deployment)
 
-`labpower.service` is the hardened unit CLAUDE.md specifies, meant to be
-installed by the LabyrinthStack repo's Ansible role. Manually:
+### 1. Images: Forgejo CI → your registry
+
+`.forgejo/workflows/image.yml` builds the image with [ko](https://ko.build)
+(straight from the Go source: no Docker daemon or QEMU in CI, Go
+cross-compiles) on a distroless `nonroot` base pinned by digest in
+`.ko.yaml`, for linux/arm64 (the Pi) and linux/amd64. The full check suite
+runs first; nothing is pushed if it fails.
+
+Set these in Forgejo → repository → Settings → Actions:
+
+| Kind | Name | Value |
+|---|---|---|
+| Variable | `REGISTRY` | registry host[:port], exactly as `docker login` uses it |
+| Secret | `REGISTRY_USERNAME` | an account with push rights (ideally push-only) |
+| Secret | `REGISTRY_PASSWORD` | its password/token |
+
+| Trigger | Tags pushed to `$REGISTRY/labpower` |
+|---|---|
+| push to `main` | `main`, `sha-<commit>` |
+| tag `vX.Y.Z` | `vX.Y.Z`, `X.Y`, `latest` |
+| other `v*` tags (e.g. `v1.5.0-rc1`) | only that tag |
+
+The job log ends with the image digest; pin that in Ansible for
+reproducible deploys. Release tags also still publish the plain arm64
+binary (`release.yml`), for the systemd path.
+
+### 2. Deploy: Ansible role
+
+`deploy/ansible/roles/labpower` is a self-contained role for your homelab
+playbook (needs the `community.docker` collection). Copy it into your
+roles path or reference this directory, then:
+
+```yaml
+- hosts: labpower_pi
+  become: true
+  roles:
+    - role: labpower
+      vars:
+        labpower_registry: <registry host[:port]>
+        labpower_image: "<registry>/labpower:v1.2.3"   # or …/labpower@sha256:<digest>
+        labpower_registry_username: "{{ vault_registry_pull_user }}"   # omit for anonymous pulls
+        labpower_registry_password: "{{ vault_registry_pull_password }}"
+        labpower_proxmox_token: "{{ vault_labpower_proxmox_token }}"
+        labpower_notify_token: "{{ vault_labpower_notify_token }}"
+        labpower_sensor_enabled: true            # AS3935 on /dev/i2c-1 + GPIO
+        labpower_config:                         # config.yaml as YAML; see config.example.yaml
+          dry_run: true
+          timezone: Europe/Amsterdam
+          # … the rest of config.example.yaml …
+          proxmox:
+            token_secret_file: ${CREDENTIALS_DIRECTORY}/proxmox-token
+            # …
+```
+
+It writes `/etc/labpower/config.yaml` and `/etc/labpower/secrets/*` owned
+by the image's user (65532, mode 0400), creates `/var/lib/labpower`, logs
+in to the registry if credentials are given, and runs the container with:
+
+- **`network_mode: host`**: labpower binds `127.0.0.1` only and is reached
+  only through Newt on the same host. Host networking keeps that loopback
+  the host's; a bridge network with published ports would not (CLAUDE.md's
+  core security requirement).
+- **Hardening** equivalent to the systemd unit: read-only root filesystem,
+  all capabilities dropped, `no-new-privileges`, non-root user, 150 MB
+  memory and 64-process limits, logs to journald.
+- **`/run/systemd/timesync` mounted read-only**, so `clock.trust:
+  ntp_or_rtc` can see timesyncd's sync marker; the RTC flag is visible via
+  `/sys`. Without it only the RTC can make the clock trusted.
+- The sensor's devices and the host's `i2c`/`gpio` group IDs (looked up
+  with getent) when `labpower_sensor_enabled`.
+
+Config or secret changes restart the container. To upgrade, change
+`labpower_image`.
+
+Everyday commands on the Pi:
+
+```sh
+docker logs -f labpower
+docker exec labpower /ko-app/labpower status -config /etc/labpower/config.yaml
+docker exec labpower /ko-app/labpower enrol  -config /etc/labpower/config.yaml   # first run: prints the 15-min link
+```
+
+`docker exec` runs as the container's user against its live state, so
+enrolment leaves no root-owned database files behind.
+
+Not verified yet on the Pi itself: the AS3935 inside the container.
+Docker masks `/sys/firmware`, where periph.io may look for the Pi's device
+tree. If the sensor isn't detected (`weather: local sensor unavailable` in
+the logs), add a read-only mount of `/sys/firmware/devicetree/base`.
+
+### Docker Compose (by hand)
+
+`../docker-compose.yml` runs the same container for trying things out:
+`docker compose up -d --build` builds locally from `../Dockerfile`, and
+`LABPOWER_IMAGE=<registry>/labpower:v1.2.3 docker compose up -d` runs the
+published image. The file lists the one-time setup (config, secrets and
+their ownership). There's no Docker `HEALTHCHECK`: the image has no shell
+or curl, and `labpower status` would report "unhealthy" whenever the
+Proxmox host is legitimately off.
+
+## systemd (alternative)
+
+`labpower.service` is the hardened unit (exposure 1.5 in
+`systemd-analyze security`). Manually:
 
 ```
 install -Dm755 labpower /usr/local/bin/labpower
@@ -20,50 +124,9 @@ systemctl daemon-reload
 systemctl enable --now labpower
 ```
 
-## Docker / Docker Compose
-
-`../Dockerfile` and `../docker-compose.yml` at the repo root package the
-same binary into a minimal, non-root, distroless image. Useful for
-running on a host you don't want to (or can't) manage with systemd, or
-for local testing against a fake Proxmox server without touching the
-real one.
-
-```
-cp deploy/config.example.yaml config.yaml   # then fill in every TODO(owner)
-mkdir -p secrets
-echo -n '<proxmox token secret>' > secrets/proxmox-token
-echo -n '<ntfy token>'           > secrets/notify-token
-docker compose up -d --build
-```
-
-Two things this setup deliberately preserves from the systemd version,
-rather than taking the usual Docker shortcut:
-
-- **`network_mode: host`**, not a bridge network + `ports:` mapping.
-  CLAUDE.md's core security requirement is that labpower binds to
-  `127.0.0.1` only and is reachable exclusively through Newt/Pangolin.
-  Host networking is what makes that true in a container the same way
-  it's true for the systemd deployment — the container's `127.0.0.1` *is*
-  the host's `127.0.0.1`. A bridge network's loopback is a different,
-  isolated thing; don't switch to one without re-reading why
-  `config.yaml`'s `listen` is validated as loopback-only.
-- **An init container fixes the state volume's ownership** to the
-  distroless image's `nonroot` UID/GID (65532) before labpower starts. A
-  fresh named volume is created root-owned, and the labpower image has no
-  shell to `chown` it from the inside (that's also why there's no Docker
-  `HEALTHCHECK`: no curl/wget to call `GET /healthz` with, and
-  `labpower status` isn't a substitute — it calls out to Proxmox, so it'd
-  report "unhealthy" whenever the host is legitimately off).
-
-The AS3935 sensor's `/dev/i2c-1` and `/dev/gpiochip0` device mappings and
-their `group_add` GIDs are Raspberry Pi OS's usual values — check
-`getent group i2c gpio` on the actual host and adjust, or delete both if
-`weather.local_sensor.enabled: false`.
-
 `config.yaml`'s `token_secret_file: ${CREDENTIALS_DIRECTORY}/proxmox-token`
-works unmodified under either deployment: systemd's `LoadCredential=`
-sets that env var itself, and `docker-compose.yml` sets it to `/run/secrets`
-to match where Compose secrets mount.
+works unmodified under both deployments: systemd's `LoadCredential=` sets
+that variable, and the container sets it to `/run/secrets`.
 
 ## Local development
 

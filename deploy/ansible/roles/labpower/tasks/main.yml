@@ -1,0 +1,94 @@
+---
+- name: Check required variables
+  ansible.builtin.assert:
+    that:
+      - labpower_registry | length > 0
+      - labpower_config | length > 0
+      - labpower_config.dry_run is defined
+      - labpower_proxmox_token | length > 0
+    fail_msg: Set labpower_registry, labpower_config (with an explicit dry_run) and labpower_proxmox_token.
+    quiet: true
+
+- name: Create config and secrets directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ labpower_uid }}"
+    group: "{{ labpower_uid }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ labpower_dir }}", mode: "0750" }
+    - { path: "{{ labpower_dir }}/secrets", mode: "0700" }
+    - { path: "{{ labpower_state_dir }}", mode: "0700" }
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Write config.yaml
+  ansible.builtin.copy:
+    content: "{{ labpower_config | to_nice_yaml(indent=2) }}"
+    dest: "{{ labpower_dir }}/config.yaml"
+    owner: "{{ labpower_uid }}"
+    group: "{{ labpower_uid }}"
+    mode: "0400"
+  notify: Restart labpower
+
+- name: Write secrets
+  ansible.builtin.copy:
+    content: "{{ item.value }}"
+    dest: "{{ labpower_dir }}/secrets/{{ item.name }}"
+    owner: "{{ labpower_uid }}"
+    group: "{{ labpower_uid }}"
+    mode: "0400"
+  loop:
+    - { name: proxmox-token, value: "{{ labpower_proxmox_token }}" }
+    - { name: notify-token, value: "{{ labpower_notify_token }}" }
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+  notify: Restart labpower
+
+- name: Look up sensor group IDs
+  ansible.builtin.getent:
+    database: group
+  when: labpower_sensor_enabled
+
+- name: Log in to the registry
+  community.docker.docker_login:
+    registry_url: "{{ labpower_registry }}"
+    username: "{{ labpower_registry_username }}"
+    password: "{{ labpower_registry_password }}"
+  when: labpower_registry_username | length > 0
+  no_log: true
+
+- name: Run labpower
+  community.docker.docker_container:
+    name: labpower
+    image: "{{ labpower_image }}"
+    pull: missing
+    command: [serve, -config, /etc/labpower/config.yaml]
+    restart_policy: unless-stopped
+    # Loopback-only by design: labpower binds 127.0.0.1 and is reached only
+    # through Newt on the same host. Host networking keeps that loopback
+    # the host's; a bridge network with published ports would not.
+    network_mode: host
+    user: "{{ labpower_uid }}:{{ labpower_uid }}"
+    # getent_group maps name -> [password, gid, members].
+    groups: "{{ labpower_sensor_groups | map('extract', getent_group) | map(attribute=1) | list if labpower_sensor_enabled else [] }}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opts: [no-new-privileges]
+    memory: "{{ labpower_memory }}"
+    pids_limit: 64
+    devices: "{{ labpower_sensor_devices | map('regex_replace', '^(.*)$', '\\1:\\1:rw') | list if labpower_sensor_enabled else [] }}"
+    env:
+      CREDENTIALS_DIRECTORY: /run/secrets
+      STATE_DIRECTORY: /var/lib/labpower
+    volumes:
+      - "{{ labpower_dir }}/config.yaml:/etc/labpower/config.yaml:ro"
+      - "{{ labpower_dir }}/secrets:/run/secrets:ro"
+      - "{{ labpower_state_dir }}:/var/lib/labpower"
+      # Clock trust (clock.trust: ntp_or_rtc): timesyncd's sync marker.
+      # The RTC flag (/sys/class/rtc/rtc0/hctosys) is visible via /sys.
+      - /run/systemd/timesync:/run/systemd/timesync:ro
+    log_driver: journald
+    state: started
