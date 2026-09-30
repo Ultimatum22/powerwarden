@@ -40,8 +40,9 @@ ntp_or_rtc`, the default).
 
 ## Stage 1: install, dry-run (7 days) — closes M2
 
-**Docker (the chosen deployment, D8):** tag a release so Forgejo pushes
-the image (`git tag v0.1.0 && git push --tags`), then run your playbook
+**Docker (the chosen deployment, D8):** cut a release (Actions →
+Release → Run workflow on main) so Forgejo tags it and pushes the image,
+then run your playbook
 with `deploy/ansible/roles/labpower`, `dry_run: true` in `labpower_config`.
 In the stages below, replace `lp <cmd> …` with
 `docker exec labpower /ko-app/labpower <cmd> -config /etc/labpower/config.yaml`

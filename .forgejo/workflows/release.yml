@@ -1,9 +1,30 @@
 name: Release
 
+# The one way to cut a release: Actions → Release → Run workflow on main,
+# choosing which part of the version to bump. It
+#   1. computes the next version from the latest vX.Y.Z tag,
+#   2. runs the full check suite and builds the arm64 binary + checksum,
+#   3. pushes an annotated vX.Y.Z tag on main (only after 2 succeeded),
+#   4. publishes a Forgejo release with the binary attached.
+# The tag push starts image.yml, which pushes :vX.Y.Z, :vX.Y and :latest.
+#
+# The tag is pushed with RELEASE_TOKEN, not the automatic token: pushes
+# made with the automatic token do not trigger other workflows.
+#
+# Secrets required:
+#   RELEASE_TOKEN — Forgejo access token with write:repository scope
+
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version part to bump'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
 
 env:
   # Pinned so the tools come from the module/build cache instead of being
@@ -17,7 +38,45 @@ jobs:
       - homelab
       - proxmox
     steps:
-      - uses: actions/checkout@v4
+      - name: Require main and RELEASE_TOKEN
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          if [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "::error::run this workflow on main (got ${GITHUB_REF_NAME})"; exit 1
+          fi
+          if [ -z "${RELEASE_TOKEN}" ]; then
+            echo "::error::secret RELEASE_TOKEN is not set for this repository (needs a token with write:repository)"; exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Compute next version
+        id: next
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          latest="$(git tag --list 'v*' --sort=-v:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)"
+          latest="${latest:-v0.0.0}"
+          IFS=. read -r major minor patch <<EOF
+          ${latest#v}
+          EOF
+          case "$BUMP" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+            *) echo "::error::unknown bump '$BUMP'"; exit 1 ;;
+          esac
+          next="v${major}.${minor}.${patch}"
+          if git rev-parse -q --verify "refs/tags/${next}" >/dev/null; then
+            echo "::error::tag ${next} already exists"; exit 1
+          fi
+          echo "Latest ${latest}, ${BUMP} bump → ${next} on $(git rev-parse --short HEAD)"
+          echo "version=${next}" >> "$GITHUB_OUTPUT"
 
       # Slim runner images lack make, and go test -race needs cgo (gcc + libc headers).
       - name: Install build tools
@@ -46,11 +105,20 @@ jobs:
 
       # make release runs the full check suite (gofmt, vet, test -race,
       # staticcheck, govulncheck) before cross-compiling, so a broken
-      # tag never gets published.
+      # commit never gets tagged or published.
       - name: make release
         run: make release
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ steps.next.outputs.version }}
+
+      - name: Push tag
+        env:
+          VERSION: ${{ steps.next.outputs.version }}
+        run: |
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.localhost"
+          git tag -a "${VERSION}" -m "labpower ${VERSION}"
+          git push origin "refs/tags/${VERSION}"
 
       - name: Publish release with binary + checksum
         uses: https://code.forgejo.org/actions/forgejo-release@v2
@@ -58,6 +126,7 @@ jobs:
           direction: upload
           url: ${{ github.server_url }}
           repo: ${{ github.repository }}
+          tag: ${{ steps.next.outputs.version }}
           release-dir: bin
-          release-notes: "labpower ${{ github.ref_name }}, built for linux/arm64 (Raspberry Pi OS Lite 64-bit)."
+          release-notes: "labpower ${{ steps.next.outputs.version }}, built for linux/arm64 (Raspberry Pi OS Lite 64-bit)."
           token: ${{ secrets.RELEASE_TOKEN }}

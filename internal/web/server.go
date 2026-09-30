@@ -57,6 +57,7 @@ type Server struct {
 	TrustedProxy  string
 	RPID          string
 	PublicOrigin  string // scheme://host of public_url, for the cross-origin check
+	Version       string // build version, shown on authenticated pages only
 
 	// Guests/Schedules/Host/Loc mirror engine.Config's scheduling inputs,
 	// so pages can describe "what the schedule says" (e.g. "Shuts down at
@@ -92,6 +93,7 @@ type Config struct {
 	RPID          string
 
 	PublicOrigin string
+	Version      string
 
 	Guests    []engine.GuestConfig
 	Schedules map[string]schedule.Schedule
@@ -125,6 +127,7 @@ func New(cfg Config) (*Server, error) {
 		TrustedProxy:  cfg.TrustedProxy,
 		RPID:          cfg.RPID,
 		PublicOrigin:  cfg.PublicOrigin,
+		Version:       cfg.Version,
 		Guests:        cfg.Guests,
 		Schedules:     cfg.Schedules,
 		Host:          cfg.Host,

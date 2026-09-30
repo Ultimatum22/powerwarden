@@ -131,7 +131,7 @@ func runServe(ctx context.Context, args []string, logger *slog.Logger) error {
 		}
 	}()
 
-	logger.Info("labpower serve starting", "dry_run", cfg.IsDryRun(), "state_dir", *stateDir, "guests", len(guests))
+	logger.Info("labpower serve starting", "version", version, "dry_run", cfg.IsDryRun(), "state_dir", *stateDir, "guests", len(guests))
 
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
@@ -215,6 +215,7 @@ func newWebServer(
 		RPID:          cfg.Auth.RPID,
 
 		PublicOrigin: cfg.PublicOrigin(),
+		Version:      version,
 		Guests:       guests,
 		Schedules:    schedules,
 		Host:         engine.HostConfig{Schedule: cfg.Host.Schedule, ShutdownGrace: cfg.Host.ShutdownGrace},

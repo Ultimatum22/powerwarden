@@ -12,7 +12,7 @@ import (
 
 func (s *Server) pd(r *http.Request, active, title string) pageData {
 	sess, _ := sessionFromContext(r.Context())
-	pd := pageData{Title: title, ActiveNav: active, CSRFToken: s.csrfToken(sess), Now: s.Clock.Now().In(s.Loc).Format("Mon 2 Jan 15:04")}
+	pd := pageData{Title: title, ActiveNav: active, CSRFToken: s.csrfToken(sess), Now: s.Clock.Now().In(s.Loc).Format("Mon 2 Jan 15:04"), Version: s.Version}
 	pd.Vacation = s.activeVacation(r.Context()) != nil
 	if !sess.CreatedAt.IsZero() {
 		remaining := s.Sessions.AbsoluteTimeout - s.Clock.Now().Sub(sess.CreatedAt)

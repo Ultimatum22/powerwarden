@@ -75,3 +75,28 @@ func TestUnknownPathIsNotFound(t *testing.T) {
 		}
 	}
 }
+
+// The build version is shown to signed-in users only; unauthenticated
+// responses must not reveal it.
+func TestVersionOnlyWhenSignedIn(t *testing.T) {
+	h := newTestServer(t)
+	h.Version = "v9.8.7-test"
+	raw, _ := h.createTestSession(t)
+
+	for _, path := range []string{"/", "/security"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: raw})
+		rec := httptest.NewRecorder()
+		h.Handler().ServeHTTP(rec, req)
+		if !strings.Contains(rec.Body.String(), "labpower v9.8.7-test") {
+			t.Errorf("GET %s (signed in): version not shown", path)
+		}
+	}
+	for _, path := range []string{"/", "/login", "/healthz", "/security"} {
+		rec := httptest.NewRecorder()
+		h.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if strings.Contains(rec.Body.String(), "v9.8.7-test") || strings.Contains(rec.Header().Get("Location"), "v9.8.7-test") {
+			t.Errorf("GET %s (signed out): version leaked", path)
+		}
+	}
+}

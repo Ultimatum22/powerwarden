@@ -61,6 +61,7 @@ type pageData struct {
 	Vacation   bool
 	SessionEnd string // human-readable, for the desktop sidebar session box
 	Now        string // local date/time for the header
+	Version    string // build version; never rendered on unauthenticated pages
 	Data       any
 }
 

@@ -319,6 +319,7 @@ button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .actions.desktop-only { display: flex; }
   .topbar { display: none; }
   .session-box form { margin-top: 8px; }
+  .session-box .version { margin-top: 8px; }
   .guest-list { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); margin-bottom: 16px; }
   .guest-list .guest-row {
     grid-template-columns: minmax(160px, 1.2fr) 120px 1.6fr minmax(220px, 1.4fr);
