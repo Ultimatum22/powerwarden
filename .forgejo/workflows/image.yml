@@ -47,7 +47,7 @@ jobs:
       SSH_OPTS: "-F /dev/null -T -p 2809 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
       SCP_OPTS: "-F /dev/null -P 2809 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Slim runner images lack make, and go test -race needs cgo (gcc + libc headers).
       - name: Install build tools
@@ -63,7 +63,7 @@ jobs:
             echo "::error::no supported package manager to install make/gcc"; exit 1
           fi
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -94,9 +94,23 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install SSH private key
+        env:
+          SSH_KEY: ${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}
         run: |
+          if [ -z "$SSH_KEY" ]; then
+            echo "::error::secret ANSIBLE_SSH_PRIVATE_KEY is not set for this repository"; exit 1
+          fi
+          # Undo common copy/paste damage: CRLF line endings, literal "\n"
+          # sequences, and a missing final newline.
+          key="$(printf '%s' "$SSH_KEY" | tr -d '\r' | sed 's/\\n/\n/g')"
+          case "$key" in
+            "-----BEGIN "*) ;;
+            *) echo "::error::ANSIBLE_SSH_PRIVATE_KEY does not start with a -----BEGIN ...----- line"; exit 1 ;;
+          esac
+          # Diagnostics without revealing the key.
+          echo "key: $(printf '%s\n' "$key" | head -n1), $(printf '%s\n' "$key" | wc -l) lines"
           eval "$(ssh-agent -s)"
-          echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" | ssh-add -
+          printf '%s\n' "$key" | ssh-add -
           echo "SSH_AUTH_SOCK=${SSH_AUTH_SOCK}" >> "${GITHUB_ENV}"
           echo "SSH_AGENT_PID=${SSH_AGENT_PID}" >> "${GITHUB_ENV}"
 
