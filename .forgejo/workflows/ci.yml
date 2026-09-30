@@ -2,12 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
 
 jobs:
   check:
-    runs-on: docker
+    runs-on:
+      - homelab
+      - proxmox
     steps:
       - uses: actions/checkout@v4
 

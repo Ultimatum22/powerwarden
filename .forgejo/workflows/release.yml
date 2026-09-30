@@ -2,11 +2,14 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags:
+      - 'v*'
 
 jobs:
   release:
-    runs-on: docker
+    runs-on:
+      - homelab
+      - proxmox
     steps:
       - uses: actions/checkout@v4
 

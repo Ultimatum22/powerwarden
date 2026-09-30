@@ -15,8 +15,10 @@ name: Image
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
+    branches:
+      - main
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 env:
@@ -27,7 +29,9 @@ env:
 
 jobs:
   image:
-    runs-on: docker
+    runs-on:
+      - homelab
+      - proxmox
     steps:
       - name: Check registry settings
         env:
