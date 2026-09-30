@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -76,17 +78,86 @@ auth:
 	return cfgPath
 }
 
+// serveRun is a `labpower serve` running in the background. Tests stop it
+// once what they're waiting for has happened instead of giving it a fixed
+// deadline: on a cold CI runner under -race, startup alone (SQLite open +
+// migrations) can take longer than any short deadline.
+type serveRun struct {
+	cancel context.CancelFunc
+	done   chan error
+}
+
+func startServe(args []string, logger *slog.Logger) *serveRun {
+	ctx, cancel := context.WithCancel(context.Background())
+	r := &serveRun{cancel: cancel, done: make(chan error, 1)}
+	go func() { r.done <- run(ctx, args, logger) }()
+	return r
+}
+
+// waitFor blocks until ch is closed or receives, failing the test if serve
+// exits first or nothing happens within serveWaitTimeout.
+func (r *serveRun) waitFor(t *testing.T, ch <-chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case err := <-r.done:
+		t.Fatalf("serve exited before %s: %v", what, err)
+	case <-time.After(serveWaitTimeout):
+		r.cancel()
+		t.Fatalf("timed out after %s waiting for %s", serveWaitTimeout, what)
+	}
+}
+
+// stop cancels serve and returns its result.
+func (r *serveRun) stop() error {
+	r.cancel()
+	return <-r.done
+}
+
+const serveWaitTimeout = 30 * time.Second
+
+// signalHandler closes ch the first time a record with message msg is
+// logged, so a test can wait for a point in serve's startup.
+type signalHandler struct {
+	slog.Handler
+	msg  string
+	once *sync.Once
+	ch   chan struct{}
+}
+
+func loggerSignalling(msg string) (*slog.Logger, <-chan struct{}) {
+	ch := make(chan struct{})
+	h := signalHandler{Handler: testLogger().Handler(), msg: msg, once: &sync.Once{}, ch: ch}
+	return slog.New(h), ch
+}
+
+func (h signalHandler) Handle(ctx context.Context, r slog.Record) error {
+	if r.Message == h.msg {
+		h.once.Do(func() { close(h.ch) })
+	}
+	return h.Handler.Handle(ctx, r)
+}
+
+func (h signalHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	h.Handler = h.Handler.WithAttrs(attrs)
+	return h
+}
+
+func (h signalHandler) WithGroup(name string) slog.Handler {
+	h.Handler = h.Handler.WithGroup(name)
+	return h
+}
+
 func TestServeTicksAndShutsDownCleanly(t *testing.T) {
 	srv := fakeProxmoxServer(t)
 	defer srv.Close()
 	cfgPath := writeTestConfig(t, srv, true) // dry-run: never touches the mutating endpoints
 	stateDir := t.TempDir()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-
-	err := run(ctx, []string{"serve", "-config", cfgPath, "-state-dir", stateDir}, testLogger())
-	if err != nil {
+	logger, started := loggerSignalling("labpower serve starting")
+	r := startServe([]string{"serve", "-config", cfgPath, "-state-dir", stateDir}, logger)
+	r.waitFor(t, started, "serve to start")
+	if err := r.stop(); err != nil {
 		t.Fatalf("run serve: %v", err)
 	}
 
@@ -124,17 +195,10 @@ func TestServeLiveModeStartsGuestForReal(t *testing.T) {
 	cfgPath := writeAlwaysOnTestConfig(t, srv, false) // dry_run: false — this is milestone 3's whole point
 	stateDir := t.TempDir()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-
-	if err := run(ctx, []string{"serve", "-config", cfgPath, "-state-dir", stateDir}, testLogger()); err != nil {
+	r := startServe([]string{"serve", "-config", cfgPath, "-state-dir", stateDir}, testLogger())
+	r.waitFor(t, started, "live serve to call the real (fake) Proxmox start endpoint")
+	if err := r.stop(); err != nil {
 		t.Fatalf("run serve: %v", err)
-	}
-
-	select {
-	case <-started:
-	default:
-		t.Fatal("expected live serve to call the real (fake) Proxmox start endpoint, but it never did")
 	}
 }
 

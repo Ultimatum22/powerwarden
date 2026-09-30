@@ -5,6 +5,12 @@ on:
     tags:
       - 'v*'
 
+env:
+  # Pinned so the tools come from the module/build cache instead of being
+  # rebuilt from source on every run. Bump them by hand.
+  STATICCHECK_VERSION: v0.8.1  # honnef.co/go/tools
+  GOVULNCHECK_VERSION: v1.8.0  # golang.org/x/vuln
+
 jobs:
   release:
     runs-on:
@@ -34,8 +40,8 @@ jobs:
 
       - name: Install lint/vuln tools
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}
+          go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       # make release runs the full check suite (gofmt, vet, test -race,
