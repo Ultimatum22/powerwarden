@@ -14,6 +14,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Slim runner images lack make, and go test -race needs cgo (gcc + libc headers).
+      - name: Install build tools
+        run: |
+          if command -v make >/dev/null && command -v gcc >/dev/null; then exit 0; fi
+          SUDO=""; [ "$(id -u)" -eq 0 ] || SUDO=sudo
+          if command -v apt-get >/dev/null; then
+            $SUDO apt-get update -qq
+            $SUDO apt-get install -y -qq --no-install-recommends make gcc libc6-dev
+          elif command -v apk >/dev/null; then
+            $SUDO apk add --no-cache make gcc musl-dev
+          else
+            echo "::error::no supported package manager to install make/gcc"; exit 1
+          fi
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod

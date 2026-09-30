@@ -3,10 +3,14 @@ name: Image
 # Builds the labpower container image with ko (no Docker daemon or QEMU
 # needed: Go cross-compiles) and pushes it to the homelab registry.
 #
-# Repository settings (Forgejo → Settings → Actions):
-#   variable REGISTRY           registry host[:port] that `docker push` uses
-#   secret   REGISTRY_USERNAME
-#   secret   REGISTRY_PASSWORD  (a token/robot account with push rights only)
+# Same pattern as homelab-new's build-images.yml: the runner builds an OCI
+# layout, copies it to vm-registry over SSH, and pushes it from there to the
+# registry on localhost (the registry itself has no auth). Docker can't push
+# a multi-arch OCI layout, so a checksum-verified crane binary is copied
+# along and does the push.
+#
+# Secrets required:
+#   ANSIBLE_SSH_PRIVATE_KEY — SSH key for homelabuser@vm-registry
 #
 # Tags pushed:
 #   push to main  → :main, :sha-<commit>
@@ -26,6 +30,10 @@ env:
   # sha256 of ko_${KO_VERSION}_Linux_<arch>.tar.gz from the release's checksums.txt
   KO_SHA256_X86_64: 635ac6ea3fd376c935fee597fbb29ab2c2449f49ef1655085fe3aa9c25fed7a5
   KO_SHA256_ARM64: 4099b2d1170d3b8a70e049237462efc2dd14d5fa30e9d2e5e108fb4f778cdd3f
+  CRANE_VERSION: 0.22.1
+  # sha256 of go-containerregistry_Linux_<arch>.tar.gz from the release's checksums.txt
+  CRANE_SHA256_X86_64: 0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0
+  CRANE_SHA256_ARM64: 898c0cff975f898a33e8c4580bdafb0e7c02c7faa33374e946762f97c4ab7110
 
 jobs:
   image:
@@ -35,27 +43,25 @@ jobs:
     timeout-minutes: 45
     env:
       REGISTRY: 10.22.40.24:5555
-      REGISTRY_HOST: 10.22.40.24
       SSH_TARGET: homelabuser@10.22.40.24
       SSH_OPTS: "-F /dev/null -T -p 2809 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
       SCP_OPTS: "-F /dev/null -P 2809 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
     steps:
-      - name: Check registry settings
-        env:
-          REGISTRY: ${{ vars.REGISTRY }}
-          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
-          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
-        run: |
-          missing=""
-          [ -n "$REGISTRY" ] || missing="$missing variable:REGISTRY"
-          [ -n "$REGISTRY_USERNAME" ] || missing="$missing secret:REGISTRY_USERNAME"
-          [ -n "$REGISTRY_PASSWORD" ] || missing="$missing secret:REGISTRY_PASSWORD"
-          if [ -n "$missing" ]; then
-            echo "::error::Set these in the repository's Actions settings:$missing"
-            exit 1
-          fi
-
       - uses: actions/checkout@v4
+
+      # Slim runner images lack make, and go test -race needs cgo (gcc + libc headers).
+      - name: Install build tools
+        run: |
+          if command -v make >/dev/null && command -v gcc >/dev/null; then exit 0; fi
+          SUDO=""; [ "$(id -u)" -eq 0 ] || SUDO=sudo
+          if command -v apt-get >/dev/null; then
+            $SUDO apt-get update -qq
+            $SUDO apt-get install -y -qq --no-install-recommends make gcc libc6-dev
+          elif command -v apk >/dev/null; then
+            $SUDO apk add --no-cache make gcc musl-dev
+          else
+            echo "::error::no supported package manager to install make/gcc"; exit 1
+          fi
 
       - uses: actions/setup-go@v5
         with:
@@ -84,7 +90,15 @@ jobs:
           echo "${sum}  ${tarball}" | sha256sum -c -
           mkdir -p "$HOME/.local/bin"
           tar -xzf "$tarball" -C "$HOME/.local/bin" ko
+          rm -f "$tarball"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install SSH private key
+        run: |
+          eval "$(ssh-agent -s)"
+          echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" | ssh-add -
+          echo "SSH_AUTH_SOCK=${SSH_AUTH_SOCK}" >> "${GITHUB_ENV}"
+          echo "SSH_AGENT_PID=${SSH_AGENT_PID}" >> "${GITHUB_ENV}"
 
       - name: Compute version and tags
         id: meta
@@ -96,32 +110,72 @@ jobs:
             tags="$ref"
             if echo "$ref" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
               minor="$(echo "${ref#v}" | cut -d. -f1-2)"
-              tags="$tags,$minor,latest"
+              tags="$tags $minor latest"
             fi
           else
             version="${ref}-${short}"
-            tags="main,sha-${short}"
+            tags="main sha-${short}"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "Version $version, tags $tags"
 
-      - name: Log in to the registry
+      - name: Build OCI layout (linux/arm64, linux/amd64)
         env:
-          REGISTRY: ${{ vars.REGISTRY }}
-          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
-          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
-        run: echo "$REGISTRY_PASSWORD" | ko login "$REGISTRY" -u "$REGISTRY_USERNAME" --password-stdin
-
-      - name: Build and push (linux/arm64, linux/amd64)
-        env:
-          KO_DOCKER_REPO: ${{ vars.REGISTRY }}/labpower
+          # Only names the image inside the layout; nothing is pushed here.
+          KO_DOCKER_REPO: localhost/labpower
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          # --sbom=none: ko would push an extra sha256-….sbom tag per image,
-          # cluttering the registry's tag list on every main push.
-          ko build ./cmd/labpower --bare --sbom=none --tags "${{ steps.meta.outputs.tags }}" --image-refs image-ref.txt
-          # The first line is the multi-arch index; the rest are per platform.
-          echo "Pushed ${{ steps.meta.outputs.tags }} as:"
-          head -n1 image-ref.txt
+          # --sbom=none: no extra sha256-….sbom artifacts next to the image.
+          ko build ./cmd/labpower --bare --sbom=none --push=false --oci-layout-path oci-layout
+
+      - name: Fetch crane ${{ env.CRANE_VERSION }} for vm-registry (checksum-verified)
+        run: |
+          # crane runs on vm-registry, so match its architecture, not the runner's.
+          remote_arch="$(ssh ${SSH_OPTS} ${SSH_TARGET} uname -m)"
+          case "$remote_arch" in
+            x86_64)        arch=x86_64; sum="$CRANE_SHA256_X86_64" ;;
+            aarch64|arm64) arch=arm64;  sum="$CRANE_SHA256_ARM64" ;;
+            *) echo "::error::unsupported vm-registry architecture $remote_arch"; exit 1 ;;
+          esac
+          tarball="go-containerregistry_Linux_${arch}.tar.gz"
+          curl -fsSL -o "$tarball" "https://github.com/google/go-containerregistry/releases/download/v${CRANE_VERSION}/${tarball}"
+          echo "${sum}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" crane
+          rm -f "$tarball"
+
+      - name: Push from vm-registry
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          SSH="ssh ${SSH_OPTS} ${SSH_TARGET}"
+          REMOTE_DIR="/tmp/labpower-image-${GITHUB_RUN_ID}"
+
+          push() {
+            $SSH "mkdir -p ${REMOTE_DIR}" || return 1
+            scp ${SCP_OPTS} -rp oci-layout crane "${SSH_TARGET}:${REMOTE_DIR}/" || return 1
+            # The layout holds one multi-arch index: push it once, then tag it.
+            first="${TAGS%% *}"
+            $SSH "cd ${REMOTE_DIR} && ./crane push --insecure oci-layout localhost:5555/labpower:${first}" > pushed.txt || return 1
+            for tag in ${TAGS#"$first"}; do
+              $SSH "${REMOTE_DIR}/crane tag --insecure localhost:5555/labpower:${first} ${tag}" || return 1
+            done
+          }
+
+          if push; then
+            $SSH "rm -rf ${REMOTE_DIR}"
+          else
+            $SSH "rm -rf ${REMOTE_DIR}" 2>/dev/null || true
+            echo "::error::push to ${REGISTRY}/labpower failed"
+            exit 1
+          fi
+
+          digest="$(sed -n 's/.*@//p' pushed.txt | tail -n1)"
+          echo "Pushed ${REGISTRY}/labpower tags: ${TAGS}"
+          echo "${REGISTRY}/labpower@${digest}"
           echo "Pin that digest in Ansible (labpower_image) for reproducible deploys."
+
+      - name: Cleanup
+        if: always()
+        run: |
+          [ -n "${SSH_AGENT_PID}" ] && ssh-agent -k || true

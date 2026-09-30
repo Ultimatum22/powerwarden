@@ -17,15 +17,16 @@ cross-compiles) on a distroless `nonroot` base pinned by digest in
 `.ko.yaml`, for linux/arm64 (the Pi) and linux/amd64. The full check suite
 runs first; nothing is pushed if it fails.
 
-Set these in Forgejo → repository → Settings → Actions:
+Like homelab-new's `build-images.yml`, the runner doesn't talk to the
+registry itself: it copies the built OCI layout to vm-registry over SSH and
+pushes it from there to `localhost:5555` (the registry itself has no auth).
+Set this in Forgejo → repository → Settings → Actions:
 
 | Kind | Name | Value |
 |---|---|---|
-| Variable | `REGISTRY` | registry host[:port], exactly as `docker login` uses it |
-| Secret | `REGISTRY_USERNAME` | an account with push rights (ideally push-only) |
-| Secret | `REGISTRY_PASSWORD` | its password/token |
+| Secret | `ANSIBLE_SSH_PRIVATE_KEY` | SSH key for `homelabuser@vm-registry` (same one homelab-new uses) |
 
-| Trigger | Tags pushed to `$REGISTRY/labpower` |
+| Trigger | Tags pushed to `10.22.40.24:5555/labpower` |
 |---|---|
 | push to `main` | `main`, `sha-<commit>` |
 | tag `vX.Y.Z` | `vX.Y.Z`, `X.Y`, `latest` |
