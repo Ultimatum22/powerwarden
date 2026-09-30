@@ -78,7 +78,7 @@ Key properties the implementation must preserve:
 ## Tech stack
 
 - **Go 1.25+** (needed for `http.CrossOriginProtection`).
-- Build: `CGO_ENABLED=0 GOOS=linux GOARCH=arm64` (64-bit Raspberry Pi OS Lite). Never build on the Pi.
+- Build: `CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7` (32-bit Raspberry Pi OS Lite, armhf); container image `linux/arm/v7`. Never build on the Pi.
 - Allowed dependencies:
   - `gopkg.in/yaml.v3` — config
   - `modernc.org/sqlite` — pure-Go SQLite (keeps CGO off)
@@ -484,8 +484,8 @@ These are **not** done in this repo; list them in a PR description or issue for 
   | everything else | deny |
 
 - **Pangolin**: dedicated site for the Pi's Newt; labpower as a **private** resource (Pangolin client access) first; role restricted to the owner with 2FA enforced; **no auth-bypass rules**; CrowdSec/Geoblock enabled if it becomes public.
-- **Forgejo Actions**: build `labpower` for arm64 on tag, run tests/vet/staticcheck/govulncheck, publish the binary as a release asset with checksum; Renovate tracks Go modules.
+- **Forgejo Actions**: build `labpower` for armv7 on tag, run tests/vet/staticcheck/govulncheck, publish the binary as a release asset with checksum; Renovate tracks Go modules.
 
 ## Hardware (for reference)
 
-Raspberry Pi Zero 2 W (64-bit Pi OS Lite, read-only overlay), 5 V 2.5 A PSU, high-endurance microSD, micro-USB Ethernet adapter (WiFi disabled — it interferes with the AS3935), DS3231 RTC and AS3935 lightning sensor on I2C bus 1 (sensor mounted a few cm from the board), optional PiSugar battery HAT for power-loss detection.
+Raspberry Pi Zero 2 W (32-bit/armhf Pi OS Lite, read-only overlay), 5 V 2.5 A PSU, high-endurance microSD, micro-USB Ethernet adapter (WiFi disabled — it interferes with the AS3935), DS3231 RTC and AS3935 lightning sensor on I2C bus 1 (sensor mounted a few cm from the board), optional PiSugar battery HAT for power-loss detection.

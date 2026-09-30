@@ -2,17 +2,20 @@ MODULE  := github.com/Ultimatum22/powerwarden
 BINARY  := labpower
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-# Never build on the Pi: cross-compile a static arm64 binary from here.
+# Never build on the Pi: cross-compile a static binary from here. The Pi
+# runs 32-bit (armhf) Raspberry Pi OS, so the target is ARMv7.
 GOOS   ?= linux
-GOARCH ?= arm64
+GOARCH ?= arm
+GOARM  ?= 7
 
-DIST := bin/$(BINARY)-$(VERSION)-$(GOOS)-$(GOARCH)
+# e.g. bin/labpower-v1.2.3-linux-armv7
+DIST := bin/$(BINARY)-$(VERSION)-$(GOOS)-$(GOARCH)$(if $(filter arm,$(GOARCH)),v$(GOARM))
 
 .PHONY: build test lint vuln check release clean dev dev-build dev-enrol dev-reset
 
 build:
 	mkdir -p bin
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) GOARM=$(GOARM) go build \
 		-ldflags "-s -w -X main.version=$(VERSION)" \
 		-o bin/$(BINARY) ./cmd/labpower
 
@@ -36,7 +39,7 @@ check: test lint vuln
 # the two files the Forgejo Actions workflow attaches to a tagged release.
 release: check
 	mkdir -p bin
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) GOARM=$(GOARM) go build \
 		-ldflags "-s -w -X main.version=$(VERSION)" \
 		-o $(DIST) ./cmd/labpower
 	sha256sum $(DIST) > $(DIST).sha256

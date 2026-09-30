@@ -65,7 +65,7 @@ setup, no `fake-hwclock`, and Newt.
 
 - Inventory: add the Pi (`<pi-ip>`, VLAN 70) to `ansible/inventory/hosts`.
 - `roles/labpower`:
-  - Download the release asset `labpower-<version>-linux-arm64` and
+  - Download the release asset `labpower-<version>-linux-armv7` and
     **verify its `.sha256`** before installing to `/usr/local/bin/labpower`
     (0755).
   - `/etc/labpower/config.yaml` (0600 root) from a template. Its values:
@@ -150,7 +150,7 @@ table inet filter {
 ## 6. CI (Forgejo Actions) and Renovate
 
 - This repo already has `.forgejo/workflows/{ci,release}.yml`: checks on
-  every push, arm64 binary + `.sha256` as release assets on `v*` tags.
+  every push, armv7 binary + `.sha256` as release assets on `v*` tags.
   The Ansible role consumes those assets.
 - Renovate: track Go modules in this repo, and the pinned labpower
   version in LabyrinthStack.

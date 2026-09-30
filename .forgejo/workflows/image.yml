@@ -141,7 +141,7 @@ jobs:
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "Version $version, tags $tags"
 
-      - name: Build OCI layout (linux/arm64, linux/amd64)
+      - name: Build OCI layout (linux/arm/v7, linux/amd64)
         env:
           # Only names the image inside the layout; nothing is pushed here.
           KO_DOCKER_REPO: localhost/labpower

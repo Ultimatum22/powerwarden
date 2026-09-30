@@ -248,7 +248,7 @@ acceptable.
 ### Phase D: staged rollout on the Pi (field acceptance)
 
 **Prepared:** `docs/ROLLOUT.md` is the step-by-step runbook (commands,
-checks, acceptance and rollback per stage). The arm64 release build is
+checks, acceptance and rollback per stage). The armv7 release build is
 verified (`make release`). Preparing it found and fixed two deployment
 bugs:
 
@@ -300,7 +300,7 @@ Tracked there, not here. Checklist from CLAUDE.md:
 - [ ] Ansible: Pi in inventory; `roles/labpower` (binary, config, credentials, unit); Pi hardening; Newt as a native service; `site.yml` tolerates powered-off hosts
 - [ ] Proxmox: persistent `ethtool … wol g`; BIOS WoL on, ErP off, "Stay off" on AC loss
 - [ ] Firewall: router + Pi nftables per the table in CLAUDE.md
-- [ ] Forgejo Actions: arm64 build on tag, checks, release asset + checksum; Renovate
+- [ ] Forgejo Actions: armv7 build on tag, checks, release asset + checksum; Renovate
 
 ### Phase F: remote access ("manage it away from home")
 

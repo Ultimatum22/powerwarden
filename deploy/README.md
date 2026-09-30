@@ -14,7 +14,7 @@ alternative.
 `.forgejo/workflows/image.yml` builds the image with [ko](https://ko.build)
 (straight from the Go source: no Docker daemon or QEMU in CI, Go
 cross-compiles) on a distroless `nonroot` base pinned by digest in
-`.ko.yaml`, for linux/arm64 (the Pi) and linux/amd64. The full check suite
+`.ko.yaml`, for linux/arm/v7 (the Pi) and linux/amd64. The full check suite
 runs first; nothing is pushed if it fails.
 
 Like homelab-new's `build-images.yml`, the runner doesn't talk to the
@@ -33,7 +33,7 @@ Set this in Forgejo → repository → Settings → Actions:
 | other `v*` tags (e.g. `v1.5.0-rc1`) | only that tag |
 
 The job log ends with the image digest; pin that in Ansible for
-reproducible deploys. Release tags also still publish the plain arm64
+reproducible deploys. Release tags also still publish the plain armv7
 binary (`release.yml`), for the systemd path.
 
 ### 2. Deploy: Ansible role

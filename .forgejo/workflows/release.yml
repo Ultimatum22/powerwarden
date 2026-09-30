@@ -3,7 +3,7 @@ name: Release
 # The one way to cut a release: Actions → Release → Run workflow on main,
 # choosing which part of the version to bump. It
 #   1. computes the next version from the latest vX.Y.Z tag,
-#   2. runs the full check suite and builds the arm64 binary + checksum,
+#   2. runs the full check suite and builds the armv7 binary + checksum,
 #   3. pushes an annotated vX.Y.Z tag on main (only after 2 succeeded),
 #   4. publishes a Forgejo release with the binary attached.
 # The tag push starts image.yml, which pushes :vX.Y.Z, :vX.Y and :latest.
@@ -138,7 +138,7 @@ jobs:
 
           body="$(jq -n --arg tag "$VERSION" \
             '{tag_name: $tag, name: $tag,
-              body: ("labpower " + $tag + ", built for linux/arm64 (Raspberry Pi OS Lite 64-bit).\n\nImage: labpower:" + $tag)}')"
+              body: ("labpower " + $tag + ", built for linux/arm/v7 (Raspberry Pi OS Lite 32-bit, armhf).\n\nImage: labpower:" + $tag)}')"
           call -X POST -H 'Content-Type: application/json' -d "$body" "${api}/releases"
           id="$(jq -r .id resp.json)"
           echo "Created release ${VERSION} (id ${id})"

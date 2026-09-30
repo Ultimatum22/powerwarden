@@ -13,7 +13,7 @@ checked by hand the first time.
 
 ## Stage 0: prerequisites on the Pi
 
-Raspberry Pi OS Lite **64-bit**, Ethernet (WiFi off, it disturbs the
+Raspberry Pi OS Lite **32-bit (armhf)**, Ethernet (WiFi off, it disturbs the
 AS3935), SSH keys only.
 
 ```sh
@@ -54,15 +54,15 @@ for the alternative install.
 On the build machine (never on the Pi):
 
 ```sh
-make release VERSION=v0.1.0          # runs every check, then builds arm64
-scp bin/labpower-v0.1.0-linux-arm64{,.sha256} <pi>:
+make release VERSION=v0.1.0          # runs every check, then builds armv7
+scp bin/labpower-v0.1.0-linux-armv7{,.sha256} <pi>:
 ```
 
 On the Pi:
 
 ```sh
-sha256sum -c labpower-v0.1.0-linux-arm64.sha256
-sudo install -Dm755 labpower-v0.1.0-linux-arm64 /usr/local/bin/labpower
+sha256sum -c labpower-v0.1.0-linux-armv7.sha256
+sudo install -Dm755 labpower-v0.1.0-linux-armv7 /usr/local/bin/labpower
 sudo install -Dm644 labpower.service /etc/systemd/system/labpower.service
 sudo install -Dm600 config.yaml   /etc/labpower/config.yaml     # dry_run: true, weather.mode: notify
 sudo install -Dm600 proxmox-token /etc/labpower/proxmox-token   # token secret only

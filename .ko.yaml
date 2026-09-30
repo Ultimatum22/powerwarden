@@ -7,10 +7,11 @@
 # can bump it. Contains CA certificates and nothing else: no shell.
 defaultBaseImage: gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 
-# The Pi is arm64; amd64 keeps the image usable for `make dev`-style
-# testing on a laptop.
+# The Pi Zero 2 W runs the linux/arm/v7 image (ko sets GOARM=7 from the
+# variant); amd64 keeps the image usable for `make dev`-style testing on a
+# laptop.
 defaultPlatforms:
-  - linux/arm64
+  - linux/arm/v7
   - linux/amd64
 
 builds:

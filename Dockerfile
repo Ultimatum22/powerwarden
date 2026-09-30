@@ -6,8 +6,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-ARG TARGETOS TARGETARCH VERSION=dev
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+ARG TARGETOS TARGETARCH TARGETVARIANT VERSION=dev
+# GOARM comes from the platform variant (linux/arm/v7 → 7); other arches ignore it.
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GOARM=${TARGETVARIANT#v} \
     go build -trimpath -ldflags "-s -w -X main.version=$VERSION" \
     -o /out/labpower ./cmd/labpower \
  && mkdir /out/state
